@@ -24,7 +24,7 @@ RUN npm run build
 # ============================================
 # Stage 2: PHP/Laravel Application
 # ============================================
-FROM php:8.3-fpm-alpine AS app
+FROM php:8.4-fpm-alpine AS app
 
 # Install system dependencies
 RUN apk add --no-cache \
