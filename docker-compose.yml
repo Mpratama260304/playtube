@@ -13,9 +13,7 @@ services:
   # Laravel Application
   # ==========================================
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: mpratamamail/playtube:latest
     container_name: playtube-app
     restart: unless-stopped
     ports:
@@ -51,9 +49,7 @@ services:
   # Queue Worker (Optional - for background jobs)
   # ==========================================
   queue:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: mpratamamail/playtube:latest
     container_name: playtube-queue
     restart: unless-stopped
     command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
