@@ -21,7 +21,7 @@ services:
     environment:
       - APP_NAME=${APP_NAME:-PlayTube}
       - APP_ENV=${APP_ENV:-production}
-      - APP_KEY=${APP_KEY}
+      - APP_KEY=${APP_KEY:-base64:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=}
       - APP_DEBUG=${APP_DEBUG:-false}
       - APP_URL=${APP_URL:-http://localhost:8080}
       - LOG_CHANNEL=${LOG_CHANNEL:-stack}
@@ -38,12 +38,6 @@ services:
       - playtube-logs:/var/www/html/storage/logs
     networks:
       - playtube-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
 
   # ==========================================
   # Queue Worker (Optional - for background jobs)
@@ -52,11 +46,12 @@ services:
     image: mpratamamail/playtube:latest
     container_name: playtube-queue
     restart: unless-stopped
-    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    command: >
+      sh -c "sleep 30 && php artisan queue:work --sleep=3 --tries=3 --max-time=3600"
     environment:
       - APP_NAME=${APP_NAME:-PlayTube}
       - APP_ENV=${APP_ENV:-production}
-      - APP_KEY=${APP_KEY}
+      - APP_KEY=${APP_KEY:-base64:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=}
       - APP_DEBUG=${APP_DEBUG:-false}
       - APP_URL=${APP_URL:-http://localhost:8080}
       - DB_CONNECTION=${DB_CONNECTION:-sqlite}
@@ -68,9 +63,6 @@ services:
       - playtube-logs:/var/www/html/storage/logs
     networks:
       - playtube-network
-    depends_on:
-      app:
-        condition: service_healthy
 
 # ==========================================
 # Networks

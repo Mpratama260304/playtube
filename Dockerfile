@@ -89,40 +89,55 @@ COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Create storage symlink placeholder script
-RUN echo '#!/bin/sh' > /usr/local/bin/start.sh \
-    && echo 'set -e' >> /usr/local/bin/start.sh \
-    && echo 'cd /var/www/html' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Ensure directories exist with proper permissions' >> /usr/local/bin/start.sh \
-    && echo 'mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs' >> /usr/local/bin/start.sh \
-    && echo 'mkdir -p database' >> /usr/local/bin/start.sh \
-    && echo 'chown -R www-data:www-data storage database bootstrap/cache' >> /usr/local/bin/start.sh \
-    && echo 'chmod -R 775 storage database bootstrap/cache' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Create SQLite database if not exists' >> /usr/local/bin/start.sh \
-    && echo 'touch database/database.sqlite 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo 'chown www-data:www-data database/database.sqlite 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Generate app key if not set' >> /usr/local/bin/start.sh \
-    && echo 'if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then' >> /usr/local/bin/start.sh \
-    && echo '  php artisan key:generate --force' >> /usr/local/bin/start.sh \
-    && echo 'fi' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Create storage link' >> /usr/local/bin/start.sh \
-    && echo 'php artisan storage:link --force 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Run migrations' >> /usr/local/bin/start.sh \
-    && echo 'php artisan migrate --force 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Cache config (skip if errors)' >> /usr/local/bin/start.sh \
-    && echo 'php artisan config:cache 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo 'php artisan route:cache 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo 'php artisan view:cache 2>/dev/null || true' >> /usr/local/bin/start.sh \
-    && echo '' >> /usr/local/bin/start.sh \
-    && echo '# Start supervisord' >> /usr/local/bin/start.sh \
-    && echo 'exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf' >> /usr/local/bin/start.sh \
-    && chmod +x /usr/local/bin/start.sh
+# Create start script
+COPY <<'EOF' /usr/local/bin/start.sh
+#!/bin/sh
+cd /var/www/html
+
+echo "==> Starting PlayTube initialization..."
+
+# Ensure directories exist
+echo "==> Creating directories..."
+mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
+mkdir -p database
+mkdir -p /var/log/supervisor
+
+# Set permissions
+echo "==> Setting permissions..."
+chown -R www-data:www-data storage database bootstrap/cache 2>/dev/null || true
+chmod -R 775 storage database bootstrap/cache 2>/dev/null || true
+
+# Create SQLite database
+echo "==> Creating SQLite database..."
+touch database/database.sqlite 2>/dev/null || true
+chown www-data:www-data database/database.sqlite 2>/dev/null || true
+chmod 664 database/database.sqlite 2>/dev/null || true
+
+# Generate app key if not set
+if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
+  echo "==> Generating APP_KEY..."
+  php artisan key:generate --force 2>/dev/null || true
+fi
+
+# Create storage link
+echo "==> Creating storage link..."
+php artisan storage:link --force 2>/dev/null || true
+
+# Run migrations
+echo "==> Running migrations..."
+php artisan migrate --force 2>/dev/null || true
+
+# Cache config (optional, skip errors)
+echo "==> Caching configuration..."
+php artisan config:clear 2>/dev/null || true
+php artisan route:clear 2>/dev/null || true
+php artisan view:clear 2>/dev/null || true
+
+echo "==> Starting supervisord..."
+exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
+EOF
+
+RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port
 EXPOSE 80
