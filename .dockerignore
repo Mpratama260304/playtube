@@ -1,0 +1,73 @@
+# ============================================
+# Docker Ignore File for PlayTube
+# ============================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE/Editor
+.idea
+.vscode
+*.swp
+*.swo
+.editorconfig
+
+# Node modules (rebuilt in Docker)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Vendor (rebuilt in Docker)
+vendor
+
+# Testing
+.phpunit.result.cache
+phpunit.xml
+tests
+coverage
+
+# Environment files (use Docker env instead)
+.env
+.env.local
+.env.*.local
+
+# Laravel generated files
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+bootstrap/cache/*
+
+# Keep .gitkeep files
+!storage/logs/.gitkeep
+!storage/framework/cache/.gitkeep
+!storage/framework/sessions/.gitkeep
+!storage/framework/views/.gitkeep
+!bootstrap/cache/.gitkeep
+
+# Documentation
+README.md
+PLAYTUBE.md
+*.md
+docs
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+cookies.txt
+NUL
+
+# Build artifacts
+public/build
+public/hot
+
+# Database (will be mounted as volume)
+database/*.sqlite
