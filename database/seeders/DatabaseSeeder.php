@@ -16,13 +16,13 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create Admin User - REQUIRED
-        // Default login: email: admin@example.com, password: admin123
+        // Default login: email: mpratamagpt@gmail.com, password: Anonymous263
         User::updateOrCreate(
-            ['email' => 'admin@example.com'],
+            ['email' => 'mpratamagpt@gmail.com'],
             [
                 'name' => 'Administrator',
                 'username' => 'admin',
-                'password' => Hash::make('admin123'),
+                'password' => Hash::make('Anonymous263'),
                 'email_verified_at' => now(),
                 'role' => 'admin',
                 'bio' => 'Platform Administrator',

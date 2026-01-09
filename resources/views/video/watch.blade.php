@@ -1,18 +1,18 @@
 <x-main-layout>
     <x-slot name="title">{{ $video->title }} - {{ config('app.name') }}</x-slot>
 
-    <div class="max-w-7xl mx-auto" x-data="videoPage()" x-init="init()">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="max-w-[1800px] mx-auto" x-data="videoPage()" x-init="init()">
+        <div class="flex flex-col lg:flex-row gap-6">
             <!-- Main Content -->
-            <div class="lg:col-span-2">
-                {{-- Background Optimization Banner (only for owner, non-blocking) --}}
+            <div class="flex-1 min-w-0">
+                {{-- Processing Banner --}}
                 @if(($isOwner || $isAdmin) && $video->processing_state === 'pending')
-                <div class="bg-blue-900/30 border border-blue-600 rounded-xl p-3 mb-4">
-                    <div class="flex items-center">
-                        <svg class="w-4 h-4 text-blue-400 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
-                        <p class="text-blue-300 text-sm">Optimizing for better playback... Video is already published.</p>
+                        <p class="text-blue-400 text-sm">Optimizing for better playback... Video is already published.</p>
                     </div>
                 </div>
                 @endif
@@ -20,7 +20,6 @@
                 <!-- Video Player -->
                 <div class="relative aspect-video bg-black rounded-xl overflow-hidden mb-4" id="video-player-container">
                     @if($video->original_path)
-                        {{-- Direct MP4 streaming with HTTP Range support for smooth seeking --}}
                         <video 
                             id="video-player"
                             class="w-full h-full"
@@ -37,8 +36,7 @@
                             Your browser does not support the video tag.
                         </video>
                     @else
-                        {{-- No video available --}}
-                        <div class="w-full h-full flex items-center justify-center">
+                        <div class="w-full h-full flex items-center justify-center bg-gray-900">
                             <div class="text-center">
                                 <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
@@ -51,39 +49,39 @@
 
                 <!-- Video Info -->
                 <div class="mb-4">
-                    <h1 class="text-xl font-bold text-white mb-2">{{ $video->title }}</h1>
+                    <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-3">{{ $video->title }}</h1>
                     
                     <div class="flex flex-wrap items-center justify-between gap-4">
                         <!-- Views & Date -->
-                        <div class="flex items-center text-sm text-gray-400">
+                        <div class="flex items-center text-sm text-gray-600 dark:text-gray-400">
                             <span>{{ number_format($video->views_count ?? $video->views()->count()) }} views</span>
                             <span class="mx-2">•</span>
                             <span>{{ $video->created_at->format('M d, Y') }}</span>
                         </div>
 
                         <!-- Actions -->
-                        <div class="flex items-center space-x-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             @auth
-                                <!-- Like/Dislike with AJAX -->
-                                <div class="flex items-center bg-gray-800 rounded-full" id="reaction-buttons">
+                                <!-- Like/Dislike -->
+                                <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-full" id="reaction-buttons">
                                     <button 
                                         type="button"
                                         @click="react('like')"
-                                        :class="{ 'text-blue-500': userReaction === 'like', 'text-gray-300': userReaction !== 'like' }"
-                                        class="flex items-center px-4 py-2 rounded-l-full hover:bg-gray-700 transition-colors"
+                                        :class="{ 'text-blue-500': userReaction === 'like', 'text-gray-700 dark:text-gray-300': userReaction !== 'like' }"
+                                        class="flex items-center gap-2 px-4 py-2 rounded-l-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                         :disabled="reacting"
                                     >
-                                        <svg class="w-5 h-5 mr-2" :fill="userReaction === 'like' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-5 h-5" :fill="userReaction === 'like' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"/>
                                         </svg>
-                                        <span x-text="formatNumber(likesCount)">{{ number_format($video->likes_count ?? 0) }}</span>
+                                        <span class="text-sm font-medium" x-text="formatNumber(likesCount)">{{ number_format($video->likes_count ?? 0) }}</span>
                                     </button>
-                                    <div class="w-px h-6 bg-gray-700"></div>
+                                    <div class="w-px h-6 bg-gray-200 dark:bg-gray-700"></div>
                                     <button 
                                         type="button"
                                         @click="react('dislike')"
-                                        :class="{ 'text-blue-500': userReaction === 'dislike', 'text-gray-300': userReaction !== 'dislike' }"
-                                        class="flex items-center px-4 py-2 rounded-r-full hover:bg-gray-700 transition-colors"
+                                        :class="{ 'text-blue-500': userReaction === 'dislike', 'text-gray-700 dark:text-gray-300': userReaction !== 'dislike' }"
+                                        class="flex items-center px-4 py-2 rounded-r-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                         :disabled="reacting"
                                     >
                                         <svg class="w-5 h-5" :fill="userReaction === 'dislike' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,32 +91,25 @@
                                 </div>
 
                                 <!-- Share -->
-                                <button onclick="shareVideo()" class="flex items-center px-4 py-2 bg-gray-800 rounded-full text-gray-300 hover:bg-gray-700">
-                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <button onclick="shareVideo()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
                                     </svg>
-                                    Share
+                                    <span class="text-sm font-medium">Share</span>
                                 </button>
 
                                 <!-- Save -->
-                                <form action="{{ route('video.watch-later', $video) }}" method="POST">
+                                <form action="{{ route('video.watch-later', $video) }}" method="POST" class="inline">
                                     @csrf
-                                    <button type="submit" class="flex items-center px-4 py-2 bg-gray-800 rounded-full text-gray-300 hover:bg-gray-700">
-                                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <button type="submit" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
                                         </svg>
-                                        Save
+                                        <span class="text-sm font-medium hidden sm:inline">Save</span>
                                     </button>
                                 </form>
-
-                                <!-- Report -->
-                                <button onclick="openReportModal()" class="p-2 bg-gray-800 rounded-full text-gray-300 hover:bg-gray-700">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
-                                    </svg>
-                                </button>
                             @else
-                                <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-800 rounded-full text-gray-300 hover:bg-gray-700 text-sm">
+                                <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
                                     Sign in to like
                                 </a>
                             @endauth
@@ -127,23 +118,23 @@
                 </div>
 
                 <!-- Channel Info & Description -->
-                <div class="bg-gray-800 rounded-xl p-4 mb-6">
-                    <div class="flex items-start justify-between mb-4">
-                        <div class="flex items-center space-x-3">
+                <div class="bg-gray-100 dark:bg-gray-800/50 rounded-xl p-4 mb-6">
+                    <div class="flex items-start justify-between gap-4 mb-4">
+                        <div class="flex items-center gap-3">
                             <a href="{{ route('channel.show', $video->user->username) }}">
                                 @if($video->user->avatar)
                                     <img src="{{ $video->user->avatar_url }}" alt="{{ $video->user->name }}" class="w-10 h-10 rounded-full object-cover">
                                 @else
-                                    <div class="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center text-white font-medium">
+                                    <div class="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-medium">
                                         {{ strtoupper(substr($video->user->name, 0, 1)) }}
                                     </div>
                                 @endif
                             </a>
                             <div>
-                                <a href="{{ route('channel.show', $video->user->username) }}" class="font-medium text-white hover:text-gray-300">
+                                <a href="{{ route('channel.show', $video->user->username) }}" class="font-medium text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                                     {{ $video->user->name }}
                                 </a>
-                                <p class="text-sm text-gray-400">{{ number_format($video->user->subscribers()->count()) }} subscribers</p>
+                                <p class="text-sm text-gray-500 dark:text-gray-400">{{ number_format($video->user->subscribers()->count()) }} subscribers</p>
                             </div>
                         </div>
 
@@ -151,13 +142,13 @@
                             @if(auth()->id() !== $video->user_id)
                                 <form action="{{ route('channel.subscribe', $video->user->username) }}" method="POST">
                                     @csrf
-                                    <button type="submit" class="px-4 py-2 rounded-full text-sm font-medium {{ $isSubscribed ? 'bg-gray-700 text-gray-300' : 'bg-white text-gray-900 hover:bg-gray-200' }}">
+                                    <button type="submit" class="px-4 py-2 rounded-full text-sm font-medium transition-colors {{ $isSubscribed ? 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' : 'bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-200' }}">
                                         {{ $isSubscribed ? 'Subscribed' : 'Subscribe' }}
                                     </button>
                                 </form>
                             @endif
                         @else
-                            <a href="{{ route('login') }}" class="px-4 py-2 bg-white text-gray-900 rounded-full text-sm font-medium hover:bg-gray-200">
+                            <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-full text-sm font-medium hover:bg-gray-700 dark:hover:bg-gray-200 transition-colors">
                                 Subscribe
                             </a>
                         @endauth
@@ -165,11 +156,9 @@
 
                     <!-- Description -->
                     <div x-data="{ expanded: false }">
-                        <div class="text-gray-300 text-sm whitespace-pre-wrap" :class="{ 'line-clamp-3': !expanded }">
-                            {{ $video->description }}
-                        </div>
+                        <div class="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap" :class="{ 'line-clamp-3': !expanded }">{{ $video->description }}</div>
                         @if(strlen($video->description) > 200)
-                            <button @click="expanded = !expanded" class="text-gray-400 text-sm mt-2 hover:text-white">
+                            <button @click="expanded = !expanded" class="text-gray-500 dark:text-gray-400 text-sm mt-2 font-medium hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
                                 <span x-show="!expanded">Show more</span>
                                 <span x-show="expanded">Show less</span>
                             </button>
@@ -180,7 +169,7 @@
                     @if($video->tags->count() > 0)
                         <div class="flex flex-wrap gap-2 mt-4">
                             @foreach($video->tags as $tag)
-                                <a href="{{ route('search', ['q' => $tag->name]) }}" class="px-2 py-1 bg-gray-700 rounded text-xs text-blue-400 hover:bg-gray-600">
+                                <a href="{{ route('search', ['q' => $tag->name]) }}" class="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs text-blue-600 dark:text-blue-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
                                     #{{ $tag->name }}
                                 </a>
                             @endforeach
@@ -190,17 +179,16 @@
 
                 <!-- Comments Section -->
                 <div class="mb-6">
-                    <h2 class="text-lg font-bold text-white mb-4">{{ number_format($video->comments_count ?? $video->comments()->whereNull('parent_id')->count()) }} Comments</h2>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">{{ number_format($video->comments_count ?? $video->comments()->whereNull('parent_id')->count()) }} Comments</h2>
 
                     @auth
-                        <!-- Add Comment Form -->
                         <form action="{{ route('video.comment', $video) }}" method="POST" class="mb-6">
                             @csrf
-                            <div class="flex space-x-3">
+                            <div class="flex gap-3">
                                 @if(auth()->user()->avatar)
-                                    <img src="{{ auth()->user()->avatar_url }}" alt="{{ auth()->user()->name }}" class="w-10 h-10 rounded-full object-cover">
+                                    <img src="{{ auth()->user()->avatar_url }}" alt="{{ auth()->user()->name }}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
                                 @else
-                                    <div class="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center text-white font-medium">
+                                    <div class="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-medium flex-shrink-0">
                                         {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
                                     </div>
                                 @endif
@@ -209,19 +197,19 @@
                                         name="body" 
                                         rows="2" 
                                         placeholder="Add a comment..." 
-                                        class="w-full px-3 py-2 bg-transparent border-b border-gray-700 text-white placeholder-gray-400 focus:outline-none focus:border-gray-500 resize-none"
+                                        class="w-full px-3 py-2 bg-transparent border-b border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 resize-none"
                                         required
                                     ></textarea>
-                                    <div class="flex justify-end mt-2 space-x-2">
-                                        <button type="reset" class="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-                                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700">Comment</button>
+                                    <div class="flex justify-end mt-2 gap-2">
+                                        <button type="reset" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">Cancel</button>
+                                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors">Comment</button>
                                     </div>
                                 </div>
                             </div>
                         </form>
                     @else
-                        <p class="text-gray-400 mb-6">
-                            <a href="{{ route('login') }}" class="text-blue-400 hover:underline">Sign in</a> to leave a comment.
+                        <p class="text-gray-600 dark:text-gray-400 mb-6">
+                            <a href="{{ route('login') }}" class="text-blue-600 dark:text-blue-400 hover:underline">Sign in</a> to leave a comment.
                         </p>
                     @endauth
 
@@ -241,31 +229,31 @@
             </div>
 
             <!-- Sidebar - Related Videos -->
-            <div class="lg:col-span-1">
-                <h3 class="text-lg font-bold text-white mb-4">Related Videos</h3>
+            <div class="w-full lg:w-[400px] xl:w-[420px] flex-shrink-0">
+                <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4">Related Videos</h3>
                 <div class="space-y-3">
                     @foreach($relatedVideos as $related)
-                        <a href="{{ route('video.watch', $related->slug) }}" class="flex space-x-2 group">
-                            <div class="relative w-40 aspect-video bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                        <a href="{{ route('video.watch', $related->slug) }}" class="flex gap-2 group">
+                            <div class="relative w-40 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                                 @if($related->has_thumbnail)
-                                    <img src="{{ $related->thumbnail_url }}" alt="{{ $related->title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                                    <img src="{{ $related->thumbnail_url }}" alt="{{ $related->title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
                                 @else
                                     <div class="w-full h-full flex items-center justify-center">
-                                        <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-8 h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                         </svg>
                                     </div>
                                 @endif
                                 @if($related->duration)
-                                    <div class="absolute bottom-1 right-1 px-1 py-0.5 bg-black/80 rounded text-xs">
+                                    <div class="absolute bottom-1 right-1 px-1 py-0.5 bg-black/80 text-white rounded text-xs font-medium">
                                         {{ $related->formatted_duration }}
                                     </div>
                                 @endif
                             </div>
                             <div class="flex-1 min-w-0">
-                                <h4 class="text-sm font-medium text-white line-clamp-2 group-hover:text-gray-300">{{ $related->title }}</h4>
-                                <p class="text-xs text-gray-400 mt-1">{{ $related->user->name }}</p>
-                                <p class="text-xs text-gray-500">{{ number_format($related->views_count ?? 0) }} views • {{ $related->created_at->diffForHumans() }}</p>
+                                <h4 class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{{ $related->title }}</h4>
+                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ $related->user->name }}</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-500">{{ number_format($related->views_count ?? 0) }} views • {{ $related->created_at->diffForHumans() }}</p>
                             </div>
                         </a>
                     @endforeach
@@ -278,16 +266,11 @@
     <script>
         function videoPage() {
             return {
-                // Reaction state
                 userReaction: @json($userReaction?->reaction ?? null),
                 likesCount: {{ $video->likes_count ?? 0 }},
                 dislikesCount: {{ $video->dislikes_count ?? 0 }},
                 reacting: false,
-                
-                // View tracking
                 viewRecorded: false,
-                
-                // CSRF token
                 csrfToken: '{{ csrf_token() }}',
                 
                 init() {
@@ -299,8 +282,6 @@
                     const video = document.getElementById('video-player');
                     if (!video) return;
                     
-                    // Simple MP4 player - no complex initialization needed
-                    // HTTP Range support is handled by the server (VideoStreamController)
                     video.addEventListener('loadedmetadata', () => {
                         console.log('Video ready: duration =', video.duration);
                     });
@@ -387,11 +368,6 @@
                 navigator.clipboard.writeText(window.location.href);
                 alert('Link copied to clipboard!');
             }
-        }
-
-        function openReportModal() {
-            // Report modal logic
-            alert('Report functionality - implement modal');
         }
     </script>
     @endpush

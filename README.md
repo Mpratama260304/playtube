@@ -144,6 +144,56 @@ php -m | grep intl
    php artisan serve
    ```
 
+## Running in GitHub Codespaces
+
+GitHub Codespaces requires special configuration for Vite dev server because assets must be served over HTTPS through the forwarded port.
+
+### Quick Start
+
+1. **Update `.env` with your Codespace name:**
+   ```bash
+   # Find your Codespace name (e.g., "urban-space-xyzabc")
+   echo $CODESPACE_NAME
+   
+   # Update .env
+   APP_URL=https://${CODESPACE_NAME}-8000.app.github.dev
+   ```
+
+2. **Start Laravel server:**
+   ```bash
+   php artisan serve --host 0.0.0.0 --port 8000
+   ```
+
+3. **Start Vite dev server (in another terminal):**
+   ```bash
+   npm run dev:codespaces
+   ```
+
+4. **Forward ports in Codespaces:**
+   - Open the "Ports" tab in VS Code
+   - Ensure port `8000` (Laravel) and `5173` (Vite) are forwarded
+   - Set port `5173` visibility to **Public** (required for assets to load)
+
+5. **Access the app:**
+   - Open `https://<CODESPACE_NAME>-8000.app.github.dev` in your browser
+
+### Troubleshooting Codespaces
+
+| Issue | Solution |
+|-------|----------|
+| Mixed Content errors | Ensure port 5173 is set to **Public** visibility |
+| Assets not loading | Restart `npm run dev:codespaces` after port forwarding |
+| HMR not working | Check that WSS connection to port 5173 is allowed |
+| `net::ERR_ADDRESS_INVALID` | Vite config auto-detects Codespaces; ensure `CODESPACE_NAME` env var exists |
+
+### How it works
+
+The `vite.config.js` automatically detects Codespaces via `process.env.CODESPACE_NAME` and configures:
+- `server.origin` → HTTPS URL for asset requests
+- `server.hmr.protocol` → `wss` for secure WebSocket
+- `server.hmr.host` → Codespaces forwarded domain
+- `server.hmr.clientPort` → `443` (HTTPS default)
+
 ## Default Credentials
 
 ### Admin Panel
