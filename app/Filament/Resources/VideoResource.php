@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\VideoResource\Pages;
 use App\Models\Video;
+use App\Services\ThumbnailService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -114,19 +115,22 @@ class VideoResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\ImageColumn::make('thumbnail_path')
+                Tables\Columns\ViewColumn::make('thumbnail')
                     ->label('Thumbnail')
-                    ->disk('public')
-                    ->width(120)
-                    ->height(68),
+                    ->view('filament.columns.thumbnail-image')
+                    ->state(fn (Video $record): string => $record->thumbnail_url ?? '/images/placeholder-thumb.svg')
+                    ->extraAttributes(['width' => '120px', 'height' => '68px']),
                 Tables\Columns\TextColumn::make('title')
                     ->searchable()
-                    ->limit(50),
+                    ->limit(40)
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Channel')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('category.name')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\BadgeColumn::make('status')
                     ->colors([
                         'warning' => 'processing',
@@ -138,16 +142,20 @@ class VideoResource extends Resource
                         'success' => 'public',
                         'warning' => 'unlisted',
                         'danger' => 'private',
-                    ]),
+                    ])
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\IconColumn::make('is_featured')
                     ->label('Featured')
-                    ->boolean(),
+                    ->boolean()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 Tables\Columns\TextColumn::make('views_count')
                     ->label('Views')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('published_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -225,11 +233,66 @@ class VideoResource extends Resource
                     ->icon('heroicon-o-star')
                     ->color('warning')
                     ->action(fn (Video $record) => $record->update(['is_featured' => !$record->is_featured])),
+                Tables\Actions\Action::make('regenerateThumbnail')
+                    ->label('Regenerate Thumbnail')
+                    ->icon('heroicon-o-photo')
+                    ->color('info')
+                    ->visible(fn (Video $record) => $record->has_original)
+                    ->requiresConfirmation()
+                    ->modalHeading('Regenerate Thumbnail')
+                    ->modalDescription('This will generate a new thumbnail from the original video file.')
+                    ->action(function (Video $record) {
+                        $thumbnailService = app(ThumbnailService::class);
+                        $result = $thumbnailService->generate($record);
+                        
+                        if ($result) {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Thumbnail Regenerated')
+                                ->body('The thumbnail has been regenerated successfully.')
+                                ->success()
+                                ->send();
+                        } else {
+                            \Filament\Notifications\Notification::make()
+                                ->title('Regeneration Failed')
+                                ->body('Could not regenerate thumbnail. Check if FFmpeg is installed.')
+                                ->danger()
+                                ->send();
+                        }
+                    }),
                 Tables\Actions\DeleteAction::make(),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('regenerateThumbnails')
+                        ->label('Regenerate Thumbnails')
+                        ->icon('heroicon-o-photo')
+                        ->color('info')
+                        ->requiresConfirmation()
+                        ->modalHeading('Regenerate Thumbnails')
+                        ->modalDescription('This will regenerate thumbnails for all selected videos that have original files.')
+                        ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
+                            $thumbnailService = app(ThumbnailService::class);
+                            $success = 0;
+                            $failed = 0;
+                            
+                            foreach ($records as $record) {
+                                if ($record->has_original) {
+                                    if ($thumbnailService->generate($record)) {
+                                        $success++;
+                                    } else {
+                                        $failed++;
+                                    }
+                                }
+                            }
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Thumbnails Regenerated')
+                                ->body("Successfully regenerated: {$success}, Failed: {$failed}")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ])
             ->defaultSort('created_at', 'desc');

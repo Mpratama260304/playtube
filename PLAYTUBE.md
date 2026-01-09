@@ -126,6 +126,35 @@ sudo supervisorctl start playtube-worker:*
 3. Check Laravel logs: `storage/logs/laravel.log`
 4. Use the "Retry Processing" button in Studio to re-process
 
+**Thumbnails not showing in admin dashboard:**
+1. Ensure storage symlink exists: `php artisan storage:link`
+2. Run thumbnail diagnostics: `php artisan debug:thumbnails --limit=20`
+3. Run thumbnail doctor: `php artisan thumbnails:doctor --limit=50`
+4. Fix missing thumbnails: `php artisan thumbnails:doctor --fix --limit=50`
+5. Verify file exists: `ls storage/app/public/videos/{uuid}/thumb.jpg`
+
+**GitHub Codespaces / HTTPS proxy issues:**
+- Thumbnails must use relative URLs (e.g., `/storage/videos/...`) not absolute URLs
+- Never use `url()` helper for storage paths in Filament ImageColumns
+- If thumbnails still show placeholders, check the `has_thumbnail` accessor:
+  ```bash
+  php artisan tinker
+  >>> Video::first()->has_thumbnail
+  >>> Video::first()->thumbnail_url
+  ```
+
+**Thumbnail Doctor Commands:**
+```bash
+# Diagnose thumbnail issues (dry run)
+php artisan thumbnails:doctor --limit=50
+
+# Fix issues automatically
+php artisan thumbnails:doctor --fix --limit=50
+
+# Force regenerate all thumbnails
+php artisan thumbnails:doctor --fix --force --limit=50
+```
+
 ### FFmpeg Installation
 
 PlayTube requires FFmpeg for video transcoding:

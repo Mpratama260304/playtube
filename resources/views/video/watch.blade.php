@@ -1,6 +1,20 @@
 <x-main-layout>
     <x-slot name="title">{{ $video->title }} - {{ config('app.name') }}</x-slot>
 
+    @section('og-tags')
+    <meta property="og:type" content="video.other">
+    <meta property="og:title" content="{{ $video->title }}">
+    <meta property="og:description" content="{{ Str::limit(strip_tags($video->description), 200) ?: 'Watch on ' . config('app.name') }}">
+    <meta property="og:image" content="{{ $video->thumbnail_url ? url($video->thumbnail_url) : url('/images/placeholder-thumb.svg') }}">
+    <meta property="og:url" content="{{ route('video.watch', $video) }}">
+    <meta property="og:site_name" content="{{ config('app.name', 'PlayTube') }}">
+    <meta property="og:video:duration" content="{{ $video->duration ?? 0 }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ $video->title }}">
+    <meta name="twitter:description" content="{{ Str::limit(strip_tags($video->description), 200) ?: 'Watch on ' . config('app.name') }}">
+    <meta name="twitter:image" content="{{ $video->thumbnail_url ? url($video->thumbnail_url) : url('/images/placeholder-thumb.svg') }}">
+    @endsection
+
     <div class="max-w-[1800px] mx-auto" x-data="videoPage()" x-init="init()">
         <div class="flex flex-col lg:flex-row gap-6">
             <!-- Main Content -->
@@ -91,7 +105,10 @@
                                 </div>
 
                                 <!-- Share -->
-                                <button onclick="shareVideo()" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                                <button 
+                                    @click="openShareModal()"
+                                    class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                >
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
                                     </svg>
@@ -112,6 +129,16 @@
                                     <span class="text-sm font-medium hidden sm:inline" x-text="watchLaterLoading ? 'Saving...' : (inWatchLater ? 'Saved' : 'Save')"></span>
                                 </button>
                             @else
+                                <!-- Share (Guest) -->
+                                <button 
+                                    @click="openShareModal()"
+                                    class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+                                    </svg>
+                                    <span class="text-sm font-medium">Share</span>
+                                </button>
                                 <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
                                     Sign in to like
                                 </a>
@@ -454,20 +481,38 @@
                         return (num / 1000).toFixed(1) + 'K';
                     }
                     return num.toLocaleString();
+                },
+
+                openShareModal() {
+                    const video = document.getElementById('video-player');
+                    const currentTime = video ? video.currentTime : 0;
+                    
+                    // Try native Web Share API first on mobile
+                    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                        navigator.share({
+                            title: '{{ $video->title }}',
+                            text: '{{ Str::limit(strip_tags($video->description), 100) }}',
+                            url: window.location.href
+                        }).catch(() => {
+                            // Fall back to modal if user cancels or share fails
+                            this.dispatchShareModal(currentTime);
+                        });
+                    } else {
+                        this.dispatchShareModal(currentTime);
+                    }
+                },
+
+                dispatchShareModal(currentTime) {
+                    window.dispatchEvent(new CustomEvent('open-share-modal', {
+                        detail: {
+                            title: '{{ addslashes($video->title) }}',
+                            url: '{{ route('video.watch', $video) }}',
+                            currentTime: currentTime,
+                            showTimestamp: true
+                        }
+                    }));
                 }
             };
-        }
-
-        function shareVideo() {
-            if (navigator.share) {
-                navigator.share({
-                    title: '{{ $video->title }}',
-                    url: window.location.href
-                });
-            } else {
-                navigator.clipboard.writeText(window.location.href);
-                alert('Link copied to clipboard!');
-            }
         }
     </script>
     @endpush

@@ -151,7 +151,14 @@
                 </a>
                 
                 <button 
-                    onclick="navigator.share ? navigator.share({title: '{{ addslashes($video->title) }}', url: '{{ route('video.watch', $video->slug) }}'}) : navigator.clipboard.writeText('{{ route('video.watch', $video->slug) }}')"
+                    @click="
+                        open = false;
+                        $dispatch('open-share-modal', {
+                            title: '{{ addslashes($video->title) }}',
+                            url: '{{ route('video.watch', $video->slug) }}',
+                            showTimestamp: false
+                        });
+                    "
                     class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

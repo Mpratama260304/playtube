@@ -123,23 +123,89 @@ class Video extends Model
     }
 
     /**
-     * Check if video has a valid thumbnail file.
+     * Normalize a storage path by removing common prefixes.
+     * Handles paths like:
+     *   - "videos/uuid/thumb.jpg" => "videos/uuid/thumb.jpg"
+     *   - "/storage/videos/uuid/thumb.jpg" => "videos/uuid/thumb.jpg"
+     *   - "storage/videos/uuid/thumb.jpg" => "videos/uuid/thumb.jpg"
+     *   - "public/videos/uuid/thumb.jpg" => "videos/uuid/thumb.jpg"
+     *   - "http://..." or "https://..." or "//..." => returned as-is (external URL)
+     */
+    private function normalizePublicPath(?string $path): ?string
+    {
+        if (empty($path)) {
+            return null;
+        }
+
+        // If it's already a full URL, return as-is
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//')) {
+            return $path;
+        }
+
+        // Strip common prefixes that shouldn't be in storage paths
+        $prefixes = ['/storage/', 'storage/', '/public/', 'public/', '/'];
+        foreach ($prefixes as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                $path = substr($path, strlen($prefix));
+            }
+        }
+
+        return $path ?: null;
+    }
+
+    /**
+     * Get the normalized thumbnail path for storage operations.
+     */
+    public function getNormalizedThumbnailPathAttribute(): ?string
+    {
+        return $this->normalizePublicPath($this->thumbnail_path);
+    }
+
+    /**
+     * Get the normalized original video path for storage operations.
+     */
+    public function getNormalizedOriginalPathAttribute(): ?string
+    {
+        return $this->normalizePublicPath($this->original_path);
+    }
+
+    /**
+     * Check if video has a valid thumbnail file on disk.
      */
     public function getHasThumbnailAttribute(): bool
     {
-        return $this->thumbnail_path && Storage::disk('public')->exists($this->thumbnail_path);
+        $path = $this->normalized_thumbnail_path;
+        return $path && Storage::disk('public')->exists($path);
     }
 
     /**
      * Get the thumbnail URL using relative path for proper production support.
      * Returns null if no thumbnail exists (for proper fallback handling in views).
+     * Always uses relative paths to work with reverse proxies and HTTPS.
      */
     public function getThumbnailUrlAttribute(): ?string
     {
-        if ($this->has_thumbnail) {
-            return '/storage/' . $this->thumbnail_path;
+        $path = $this->normalized_thumbnail_path;
+        
+        // Check if it's an external URL
+        if ($path && (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//'))) {
+            return $path;
         }
+
+        if ($path && Storage::disk('public')->exists($path)) {
+            return '/storage/' . $path;
+        }
+        
         return null;
+    }
+
+    /**
+     * Check if original video file exists on disk.
+     */
+    public function getHasOriginalAttribute(): bool
+    {
+        $path = $this->normalized_original_path;
+        return $path && Storage::disk('public')->exists($path);
     }
 
     /**
@@ -147,8 +213,9 @@ class Video extends Model
      */
     public function getVideoUrlAttribute(): string
     {
-        if ($this->original_path && Storage::disk('public')->exists($this->original_path)) {
-            return '/storage/' . $this->original_path;
+        $path = $this->normalized_original_path;
+        if ($path && Storage::disk('public')->exists($path)) {
+            return '/storage/' . $path;
         }
         return '';
     }

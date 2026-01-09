@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180">
+  <rect width="320" height="180" fill="#1f2937"/>
+  <g transform="translate(120, 50)">
+    <rect x="0" y="0" width="80" height="80" rx="8" fill="#374151"/>
+    <path d="M30 25 L60 40 L30 55 Z" fill="#6b7280"/>
+  </g>
+  <text x="160" y="155" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="14" fill="#6b7280">No thumbnail</text>
+</svg>

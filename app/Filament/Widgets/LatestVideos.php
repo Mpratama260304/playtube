@@ -19,21 +19,23 @@ class LatestVideos extends BaseWidget
                 Video::query()->latest()->limit(5)
             )
             ->columns([
-                Tables\Columns\ImageColumn::make('thumbnail_url')
+                Tables\Columns\ViewColumn::make('thumbnail')
                     ->label('Thumbnail')
-                    ->circular(false)
-                    ->width(80)
-                    ->height(45),
+                    ->view('filament.columns.thumbnail-image')
+                    ->state(fn (Video $record): string => $record->thumbnail_url ?? '/images/placeholder-thumb.svg')
+                    ->extraAttributes(['width' => '80px', 'height' => '45px']),
                 Tables\Columns\TextColumn::make('title')
-                    ->limit(50)
-                    ->searchable(),
+                    ->limit(40)
+                    ->searchable()
+                    ->wrap(),
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Creator')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('views_count')
                     ->label('Views')
-                    ->counts('views')
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(),
                 Tables\Columns\BadgeColumn::make('status')
                     ->colors([
                         'warning' => 'processing',
@@ -43,7 +45,8 @@ class LatestVideos extends BaseWidget
                     ]),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->actions([
                 Tables\Actions\Action::make('view')
