@@ -19,9 +19,13 @@ class LibraryController extends Controller
             ->with(['user'])
             ->get();
 
-        $likedVideos = auth()->user()->reactions()
-            ->where('type', 'like')
-            ->with(['video.user'])
+        $likedVideos = Video::published()
+            ->with(['user'])
+            ->whereHas('reactions', function ($query) {
+                $query->where('user_id', auth()->id())
+                    ->where('reaction', 'like');
+            })
+            ->take(10)
             ->get();
 
         $playlists = auth()->user()->playlists()->withCount('videos')->get();
@@ -55,7 +59,7 @@ class LibraryController extends Controller
             ->with(['user'])
             ->whereHas('reactions', function ($query) {
                 $query->where('user_id', auth()->id())
-                    ->where('type', 'like');
+                    ->where('reaction', 'like');
             })
             ->latest()
             ->paginate(24);

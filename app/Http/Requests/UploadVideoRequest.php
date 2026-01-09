@@ -3,12 +3,30 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class UploadVideoRequest extends FormRequest
 {
     public function authorize(): bool
     {
         return auth()->check() && !auth()->user()->is_banned;
+    }
+
+    /**
+     * Handle a failed validation attempt - return JSON for AJAX requests
+     */
+    protected function failedValidation(Validator $validator)
+    {
+        if ($this->expectsJson() || $this->ajax()) {
+            throw new HttpResponseException(response()->json([
+                'success' => false,
+                'message' => $validator->errors()->first(),
+                'errors' => $validator->errors()
+            ], 422));
+        }
+
+        parent::failedValidation($validator);
     }
 
     public function rules(): array

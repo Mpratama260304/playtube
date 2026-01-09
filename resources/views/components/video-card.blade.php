@@ -102,15 +102,35 @@
                 class="absolute right-0 mt-1 w-52 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-20"
             >
                 @auth
-                    <form action="{{ route('video.watch-later', $video) }}" method="POST">
-                        @csrf
-                        <button type="submit" class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            Save to Watch Later
-                        </button>
-                    </form>
+                    <button 
+                        type="button"
+                        x-data="{ loading: false, saved: false }"
+                        @click="
+                            if (loading) return;
+                            loading = true;
+                            fetch('{{ route('video.watch-later', $video) }}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json'
+                                }
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                saved = data.added;
+                                loading = false;
+                                open = false;
+                            })
+                            .catch(() => loading = false);
+                        "
+                        class="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span x-text="loading ? 'Saving...' : (saved ? 'Saved!' : 'Save to Watch Later')"></span>
+                    </button>
                     <button 
                         type="button" 
                         @click="$dispatch('add-to-playlist', { videoId: {{ $video->id }} })" 

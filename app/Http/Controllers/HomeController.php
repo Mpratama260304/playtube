@@ -12,9 +12,6 @@ class HomeController extends Controller
     {
         $query = Video::published()
             ->with(['user', 'category'])
-            ->withCount(['views', 'reactions as likes_count' => function ($q) {
-                $q->where('type', 'like');
-            }])
             ->where('is_short', false);
 
         // Filter by category if provided
@@ -36,9 +33,6 @@ class HomeController extends Controller
     {
         $videos = Video::published()
             ->with(['user', 'category'])
-            ->withCount(['views', 'reactions as likes_count' => function ($q) {
-                $q->where('type', 'like');
-            }])
             ->where('is_short', false)
             ->trending(7)
             ->paginate(24);
@@ -52,9 +46,6 @@ class HomeController extends Controller
     {
         $videos = Video::published()
             ->with(['user', 'category'])
-            ->withCount(['views', 'reactions as likes_count' => function ($q) {
-                $q->where('type', 'like');
-            }])
             ->where('is_short', false)
             ->latest()
             ->paginate(24);

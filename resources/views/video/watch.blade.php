@@ -98,16 +98,19 @@
                                     <span class="text-sm font-medium">Share</span>
                                 </button>
 
-                                <!-- Save -->
-                                <form action="{{ route('video.watch-later', $video) }}" method="POST" class="inline">
-                                    @csrf
-                                    <button type="submit" class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
-                                        </svg>
-                                        <span class="text-sm font-medium hidden sm:inline">Save</span>
-                                    </button>
-                                </form>
+                                <!-- Save (Watch Later) - AJAX -->
+                                <button 
+                                    type="button" 
+                                    @click="toggleWatchLater()"
+                                    :disabled="watchLaterLoading"
+                                    class="flex items-center gap-2 px-4 py-2 rounded-full text-gray-700 dark:text-gray-300 transition-colors"
+                                    :class="inWatchLater ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'"
+                                >
+                                    <svg class="w-5 h-5" :fill="inWatchLater ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                                    </svg>
+                                    <span class="text-sm font-medium hidden sm:inline" x-text="watchLaterLoading ? 'Saving...' : (inWatchLater ? 'Saved' : 'Save')"></span>
+                                </button>
                             @else
                                 <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
                                     Sign in to like
@@ -182,8 +185,7 @@
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">{{ number_format($video->comments_count ?? $video->comments()->whereNull('parent_id')->count()) }} Comments</h2>
 
                     @auth
-                        <form action="{{ route('video.comment', $video) }}" method="POST" class="mb-6">
-                            @csrf
+                        <form @submit.prevent="postComment()" class="mb-6">
                             <div class="flex gap-3">
                                 @if(auth()->user()->avatar)
                                     <img src="{{ auth()->user()->avatar_url }}" alt="{{ auth()->user()->name }}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
@@ -194,15 +196,22 @@
                                 @endif
                                 <div class="flex-1">
                                     <textarea 
-                                        name="body" 
+                                        x-model="newComment"
                                         rows="2" 
                                         placeholder="Add a comment..." 
                                         class="w-full px-3 py-2 bg-transparent border-b border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 resize-none"
                                         required
                                     ></textarea>
+                                    <div x-show="commentError" class="text-red-500 text-sm mt-1" x-text="commentError"></div>
                                     <div class="flex justify-end mt-2 gap-2">
-                                        <button type="reset" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">Cancel</button>
-                                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors">Comment</button>
+                                        <button type="button" @click="newComment = ''; commentError = ''" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">Cancel</button>
+                                        <button 
+                                            type="submit" 
+                                            :disabled="postingComment || !newComment.trim()"
+                                            class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span x-text="postingComment ? 'Posting...' : 'Comment'"></span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -214,7 +223,27 @@
                     @endauth
 
                     <!-- Comments List -->
-                    <div class="space-y-4">
+                    <div id="comments-container" class="space-y-4">
+                        <!-- New comments will be prepended here via AJAX -->
+                        <template x-for="comment in newComments" :key="comment.id">
+                            <div class="flex gap-3">
+                                <a :href="'/channel/' + comment.user.username" class="flex-shrink-0">
+                                    <template x-if="comment.user.avatar_url">
+                                        <img :src="comment.user.avatar_url" :alt="comment.user.name" class="w-10 h-10 rounded-full object-cover">
+                                    </template>
+                                    <template x-if="!comment.user.avatar_url">
+                                        <div class="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-medium" x-text="comment.user.name.charAt(0).toUpperCase()"></div>
+                                    </template>
+                                </a>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <a :href="'/channel/' + comment.user.username" class="text-sm font-medium text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 transition-colors" x-text="comment.user.name"></a>
+                                        <span class="text-xs text-gray-500 dark:text-gray-400">just now</span>
+                                    </div>
+                                    <p class="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap break-words" x-text="comment.body"></p>
+                                </div>
+                            </div>
+                        </template>
                         @foreach($comments as $comment)
                             @include('components.comment', ['comment' => $comment])
                         @endforeach
@@ -272,6 +301,17 @@
                 reacting: false,
                 viewRecorded: false,
                 csrfToken: '{{ csrf_token() }}',
+                
+                // Watch Later state
+                inWatchLater: {{ $inWatchLater ? 'true' : 'false' }},
+                watchLaterLoading: false,
+                
+                // Comments state
+                newComment: '',
+                newComments: [],
+                postingComment: false,
+                commentError: '',
+                commentsCount: {{ $video->comments_count ?? 0 }},
                 
                 init() {
                     this.initVideoPlayer();
@@ -344,6 +384,66 @@
                         console.error('Reaction failed:', e);
                     } finally {
                         this.reacting = false;
+                    }
+                },
+                
+                async toggleWatchLater() {
+                    if (this.watchLaterLoading) return;
+                    this.watchLaterLoading = true;
+                    
+                    try {
+                        const response = await fetch('{{ route('video.watch-later', $video) }}', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': this.csrfToken,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            this.inWatchLater = data.added;
+                        }
+                    } catch (e) {
+                        console.error('Watch Later toggle failed:', e);
+                    } finally {
+                        this.watchLaterLoading = false;
+                    }
+                },
+                
+                async postComment() {
+                    if (this.postingComment || !this.newComment.trim()) return;
+                    this.postingComment = true;
+                    this.commentError = '';
+                    
+                    try {
+                        const response = await fetch('{{ route('video.comment', $video) }}', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': this.csrfToken,
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({ body: this.newComment })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            // Add the new comment to the top of the list
+                            this.newComments.unshift(data.comment);
+                            this.newComment = '';
+                            this.commentsCount++;
+                        } else if (data.errors) {
+                            this.commentError = Object.values(data.errors).flat()[0];
+                        }
+                    } catch (e) {
+                        console.error('Comment post failed:', e);
+                        this.commentError = 'Failed to post comment. Please try again.';
+                    } finally {
+                        this.postingComment = false;
                     }
                 },
                 

@@ -108,4 +108,62 @@ class VideoApiController extends Controller
             'data' => $comment,
         ]);
     }
+
+    /**
+     * Record a view for a video
+     */
+    public function recordView(Request $request, Video $video)
+    {
+        // Only increment if not recently viewed by this user/IP
+        $cacheKey = 'video_view_' . $video->id . '_' . ($request->user()?->id ?? $request->ip());
+        
+        if (!cache()->has($cacheKey)) {
+            $video->increment('views_count');
+            cache()->put($cacheKey, true, now()->addMinutes(30));
+            
+            // Record in watch history if authenticated
+            if ($request->user()) {
+                $request->user()->watchHistory()->updateOrCreate(
+                    ['video_id' => $video->id],
+                    ['watched_at' => now()]
+                );
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'views_count' => $video->fresh()->views_count,
+        ]);
+    }
+
+    /**
+     * Toggle reaction on a comment (like/dislike)
+     */
+    public function reactComment(Request $request, Comment $comment)
+    {
+        $request->validate([
+            'reaction' => ['required', 'in:like,dislike'],
+        ]);
+
+        $result = Reaction::toggle(
+            auth()->id(),
+            'comment',
+            $comment->id,
+            $request->reaction
+        );
+
+        // Update counts
+        $comment->update([
+            'likes_count' => Reaction::where(['target_type' => 'comment', 'target_id' => $comment->id, 'reaction' => 'like'])->count(),
+            'dislikes_count' => Reaction::where(['target_type' => 'comment', 'target_id' => $comment->id, 'reaction' => 'dislike'])->count(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'action' => $result['action'],
+            'reaction' => $result['reaction'],
+            'likes_count' => $comment->fresh()->likes_count,
+            'dislikes_count' => $comment->fresh()->dislikes_count,
+        ]);
+    }
 }

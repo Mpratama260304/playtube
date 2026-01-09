@@ -25,8 +25,9 @@ class StudioController extends Controller
         $totalViews = (int) $user->videos()->sum('views_count');
         $subscriberCount = $user->subscribers()->count();
         $videoCount = $user->videos()->count();
-        $totalLikes = Reaction::whereIn('video_id', $user->videos()->pluck('id'))
-            ->where('type', 'like')
+        $totalLikes = Reaction::where('target_type', 'video')
+            ->whereIn('target_id', $user->videos()->pluck('id'))
+            ->where('reaction', 'like')
             ->count();
 
         $recentVideos = $user->videos()
@@ -147,8 +148,9 @@ class StudioController extends Controller
         $totalViews = (int) $user->videos()->sum('views_count');
         $subscriberCount = $user->subscribers()->count();
         $videoCount = $user->videos()->count();
-        $totalLikes = Reaction::whereIn('video_id', $user->videos()->pluck('id'))
-            ->where('type', 'like')
+        $totalLikes = Reaction::where('target_type', 'video')
+            ->whereIn('target_id', $user->videos()->pluck('id'))
+            ->where('reaction', 'like')
             ->count();
 
         $videos = $user->videos()

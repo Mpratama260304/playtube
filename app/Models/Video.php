@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -11,6 +12,7 @@ use Illuminate\Support\Str;
 
 class Video extends Model
 {
+    use HasFactory;
     // Status constants
     public const STATUS_PROCESSING = 'processing';
     public const STATUS_PUBLISHED = 'published';

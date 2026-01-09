@@ -32,13 +32,16 @@ Route::prefix('v1')->group(function () {
     });
 });
 
-// Authenticated API Routes
-Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+// Authenticated API Routes (use web session auth or Sanctum token)
+Route::middleware(['web', 'auth'])->prefix('v1')->group(function () {
     // Video interactions
     Route::post('/videos/{video}/view', [VideoApiController::class, 'recordView']);
     Route::post('/videos/{video}/react', [VideoApiController::class, 'react']);
-    Route::post('/videos/{video}/comment', [VideoApiController::class, 'comment']);
+    Route::post('/videos/{video}/comment', [VideoApiController::class, 'storeComment']);
     Route::get('/videos/{video}/comments', [VideoApiController::class, 'comments']);
+    
+    // Comment reactions
+    Route::post('/comments/{comment}/react', [VideoApiController::class, 'reactComment']);
     
     // User's videos
     Route::get('/my/videos', [VideoApiController::class, 'myVideos']);
@@ -81,14 +84,14 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
     
     Route::post('/videos/{video}/watch-later', function (\App\Models\Video $video, Request $request) {
         $user = $request->user();
-        $existing = $user->watchLater()->where('video_id', $video->id)->first();
+        $exists = $user->watchLater()->where('videos.id', $video->id)->exists();
         
-        if ($existing) {
-            $existing->delete();
+        if ($exists) {
+            $user->watchLater()->detach($video->id);
             return response()->json(['saved' => false]);
         }
         
-        $user->watchLater()->create(['video_id' => $video->id]);
+        $user->watchLater()->attach($video->id);
         return response()->json(['saved' => true]);
     });
 });
