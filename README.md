@@ -253,6 +253,55 @@ php artisan queue:work
 
 For production, use a process manager like Supervisor.
 
+## Video Streaming Architecture
+
+PlayTube uses optimized MP4 streaming for fast video playback:
+
+### How It Works
+
+1. **Faststart MP4**: Videos are processed with FFmpeg's `-movflags +faststart` flag, which moves the moov atom to the beginning of the file. This allows playback to begin immediately without downloading the entire file.
+
+2. **Multi-Quality Renditions**: Videos are transcoded to multiple qualities (360p, 480p, 720p, 1080p) so users can select appropriate quality for their connection. Mobile devices default to 360p.
+
+3. **HTTP Range Requests (RFC 7233)**: The streaming controller supports byte-range requests, enabling:
+   - Instant seeking to any position
+   - Efficient bandwidth usage
+   - Resume after network interruption
+
+4. **Client-Side Optimizations**:
+   - **Preload metadata**: `<video preload="metadata">` loads only video headers initially
+   - **Warmup cache fetch**: First 512KB is prefetched via Range request to prime CDN/proxies
+   - **Adaptive quality**: Auto-downshifts quality if buffering is detected
+   - **Loading skeleton**: Shows immediately with poster image while video initializes
+
+### Streaming Endpoint
+
+```
+GET /stream/{video}?quality=360|480|720|1080
+```
+
+Headers returned:
+- `Accept-Ranges: bytes`
+- `Content-Range: bytes 0-999/10000`
+- `Content-Type: video/mp4`
+
+### Production Setup
+
+For production, configure Nginx to handle streaming directly:
+
+```nginx
+location /stream/ {
+    internal;
+    alias /path/to/storage/app/videos/;
+}
+```
+
+Enable X-Accel-Redirect by setting in your `.env`:
+```
+VIDEO_USE_XACCEL=true
+```
+
+
 ## API Endpoints
 
 Basic REST API available at `/api/v1`:

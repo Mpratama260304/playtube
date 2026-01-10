@@ -41,19 +41,26 @@ class VideoController extends Controller
             ->with(['user', 'replies.user'])
             ->rootComments()
             ->latest()
-            ->paginate(20);
+            ->paginate(15);
 
-        // Get related videos
-        $relatedVideos = Video::published()
-            ->where('id', '!=', $video->id)
-            ->where(function ($query) use ($video) {
-                $query->where('category_id', $video->category_id)
-                    ->orWhere('user_id', $video->user_id);
-            })
-            ->with(['user'])
-            ->inRandomOrder()
-            ->take(10)
-            ->get();
+        // Get related videos - optimized with eager loading and cache
+        $relatedVideos = cache()->remember(
+            "related_videos_{$video->id}",
+            now()->addMinutes(5),
+            function () use ($video) {
+                return Video::published()
+                    ->where('id', '!=', $video->id)
+                    ->where(function ($query) use ($video) {
+                        $query->where('category_id', $video->category_id)
+                            ->orWhere('user_id', $video->user_id);
+                    })
+                    ->select(['id', 'uuid', 'slug', 'title', 'user_id', 'thumbnail_path', 'duration', 'created_at', 'views_count'])
+                    ->with(['user:id,name,username'])
+                    ->inRandomOrder()
+                    ->take(8)
+                    ->get();
+            }
+        );
 
         // Get user's reaction if logged in
         $userReaction = null;

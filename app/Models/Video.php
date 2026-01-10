@@ -248,26 +248,50 @@ class Video extends Model
     /**
      * Get the video stream URL with Range request support (for smooth seeking).
      * Uses relative URL to work properly with reverse proxies and tunnels.
+     * 
+     * Always returns a URL if uuid exists - let the controller handle 404 for debugging.
+     * This prevents blank video players when Storage::exists() has issues.
      */
     public function getStreamUrlAttribute(): string
     {
-        if ($this->original_path && Storage::disk('public')->exists($this->original_path)) {
-            // Use relative URL path instead of route() to avoid localhost issues
+        // Always return URL if we have a uuid - controller will 404 if file missing
+        if ($this->uuid) {
             return '/stream/' . $this->uuid;
         }
         return '';
     }
 
     /**
+     * Get the best available playback path.
+     * Priority: stream_path (faststart) > original_path
+     */
+    public function getPlaybackPathAttribute(): ?string
+    {
+        // Prefer stream_path (faststart optimized)
+        if ($this->stream_ready && $this->stream_path) {
+            return $this->stream_path;
+        }
+        
+        return $this->original_path;
+    }
+
+    /**
+     * Check if video has any playable file.
+     */
+    public function hasPlayableFile(): bool
+    {
+        $path = $this->playback_path;
+        return $path && Storage::disk('public')->exists($path);
+    }
+
+    /**
      * Get the HLS master playlist URL using relative path.
      * Uses streaming route for authenticated access.
+     * @deprecated HLS has been removed - use stream_url instead
      */
     public function getHlsUrlAttribute(): ?string
     {
-        if ($this->hls_master_path && Storage::disk('public')->exists($this->hls_master_path)) {
-            // Use streaming route for better control
-            return '/stream/' . $this->uuid . '/hls/master.m3u8';
-        }
+        // HLS is deprecated - return null
         return null;
     }
 

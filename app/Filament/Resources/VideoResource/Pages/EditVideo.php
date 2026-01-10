@@ -3,181 +3,165 @@
 namespace App\Filament\Resources\VideoResource\Pages;
 
 use App\Filament\Resources\VideoResource;
+use App\Jobs\PrepareStreamMp4Job;
+use App\Jobs\BuildRenditionsJob;
 use App\Models\Video;
-use App\Services\HlsService;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
 
 class EditVideo extends EditRecord
 {
     protected static string $resource = VideoResource::class;
 
-    /**
-     * Store original hls_enabled state before save
-     */
-    protected ?bool $originalHlsEnabled = null;
-
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('generateHls')
-                ->label('Generate HLS Now')
+            // Reprocess stream MP4 (fast-start)
+            Actions\Action::make('reprocessStream')
+                ->label('Reprocess Stream')
                 ->icon('heroicon-o-play-circle')
                 ->color('success')
-                ->visible(fn () => $this->record->has_original && $this->record->can_generate_hls)
+                ->visible(fn () => $this->record->has_original && !$this->record->stream_ready)
                 ->requiresConfirmation()
-                ->modalHeading('Generate HLS Stream')
-                ->modalDescription('This will queue HLS transcoding. Make sure a queue worker is running.')
+                ->modalHeading('Reprocess Stream MP4')
+                ->modalDescription('This will create a new fast-start MP4 for instant playback. Make sure a queue worker is running.')
                 ->action(function () {
-                    $this->record->update(['hls_enabled' => true]);
-                    
-                    $hlsService = app(HlsService::class);
-                    $result = $hlsService->enqueue($this->record, 'admin_edit_action');
-                    
-                    Notification::make()
-                        ->title($result['success'] ? 'HLS Transcoding Queued' : 'HLS Generation Failed')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
-                        ->send();
-                    
-                    $this->record->refresh();
-                }),
-            Actions\Action::make('retryHls')
-                ->label('Retry HLS')
-                ->icon('heroicon-o-arrow-path')
-                ->color('warning')
-                ->visible(fn () => $this->record->has_original && $this->record->processing_state === Video::PROCESSING_FAILED)
-                ->requiresConfirmation()
-                ->modalHeading('Retry HLS Transcoding')
-                ->modalDescription('This will clear the error and queue HLS transcoding again.')
-                ->action(function () {
-                    // Clear previous state
+                    // Reset processing state
                     $this->record->update([
-                        'hls_enabled' => true,
-                        'processing_state' => null,
-                        'processing_progress' => null,
+                        'processing_state' => Video::PROCESSING_PENDING,
+                        'processing_progress' => 0,
                         'processing_error' => null,
-                        'hls_queued_at' => null,
-                        'hls_started_at' => null,
-                        'hls_last_heartbeat_at' => null,
+                        'stream_ready' => false,
                     ]);
                     
-                    $hlsService = app(HlsService::class);
-                    $result = $hlsService->enqueue($this->record, 'admin_retry');
+                    // Dispatch the job
+                    dispatch(new PrepareStreamMp4Job($this->record))->onQueue('high');
                     
                     Notification::make()
-                        ->title($result['success'] ? 'HLS Retry Queued' : 'Retry Failed')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
+                        ->title('Stream Processing Queued')
+                        ->body('The video will be optimized for fast playback. Check the processing logs for progress.')
+                        ->success()
                         ->send();
                     
                     $this->record->refresh();
                 }),
-            Actions\Action::make('rebuildHls')
-                ->label('Rebuild HLS')
-                ->icon('heroicon-o-arrow-path')
+            
+            // Rebuild renditions (quality options)
+            Actions\Action::make('rebuildRenditions')
+                ->label('Rebuild Renditions')
+                ->icon('heroicon-o-squares-plus')
                 ->color('warning')
-                ->visible(fn () => $this->record->has_original && $this->record->isHlsReady())
+                ->visible(fn () => $this->record->has_original || $this->record->stream_ready)
                 ->requiresConfirmation()
-                ->modalHeading('Rebuild HLS Stream')
-                ->modalDescription('This will delete existing HLS files and regenerate them.')
+                ->modalHeading('Rebuild Quality Renditions')
+                ->modalDescription('This will regenerate 360p, 480p, 720p, 1080p versions. Existing renditions will be replaced.')
                 ->action(function () {
-                    // Delete existing HLS directory
-                    $hlsDir = $this->record->hls_directory;
-                    if ($hlsDir) {
-                        $fullPath = \Illuminate\Support\Facades\Storage::disk('public')->path($hlsDir);
-                        if (\Illuminate\Support\Facades\File::isDirectory($fullPath)) {
-                            \Illuminate\Support\Facades\File::deleteDirectory($fullPath);
+                    // Delete existing renditions
+                    if ($this->record->renditions) {
+                        foreach ($this->record->renditions as $quality => $info) {
+                            if (isset($info['path']) && Storage::disk('public')->exists($info['path'])) {
+                                Storage::disk('public')->delete($info['path']);
+                            }
                         }
                     }
                     
+                    // Clear renditions
+                    $this->record->update(['renditions' => null]);
+                    
+                    // Dispatch the job
+                    dispatch(new BuildRenditionsJob($this->record))->onQueue('default');
+                    
+                    Notification::make()
+                        ->title('Renditions Build Queued')
+                        ->body('Multiple quality versions will be created. This may take several minutes.')
+                        ->success()
+                        ->send();
+                    
+                    $this->record->refresh();
+                }),
+            
+            // Full reprocess (stream + renditions)
+            Actions\Action::make('fullReprocess')
+                ->label('Full Reprocess')
+                ->icon('heroicon-o-arrow-path')
+                ->color('danger')
+                ->visible(fn () => $this->record->has_original)
+                ->requiresConfirmation()
+                ->modalHeading('Full Reprocess Video')
+                ->modalDescription('This will delete all processed files and regenerate everything from scratch. This cannot be undone.')
+                ->action(function () {
+                    // Delete stream file
+                    if ($this->record->stream_path && Storage::disk('public')->exists($this->record->stream_path)) {
+                        Storage::disk('public')->delete($this->record->stream_path);
+                    }
+                    
+                    // Delete renditions directory
+                    $renditionsDir = "videos/{$this->record->uuid}/renditions";
+                    if (Storage::disk('public')->exists($renditionsDir)) {
+                        Storage::disk('public')->deleteDirectory($renditionsDir);
+                    }
+                    
+                    // Reset all processing fields
                     $this->record->update([
-                        'hls_master_path' => null,
-                        'hls_enabled' => true,
-                        'processing_state' => null,
-                        'processing_progress' => null,
+                        'stream_path' => null,
+                        'stream_ready' => false,
+                        'renditions' => null,
+                        'processing_state' => Video::PROCESSING_PENDING,
+                        'processing_progress' => 0,
                         'processing_error' => null,
-                        'hls_queued_at' => null,
-                        'hls_started_at' => null,
-                        'hls_last_heartbeat_at' => null,
                         'processing_started_at' => null,
                         'processing_finished_at' => null,
                     ]);
                     
-                    $hlsService = app(HlsService::class);
-                    $result = $hlsService->enqueue($this->record, 'admin_rebuild');
+                    // Dispatch stream job (which will chain to renditions)
+                    dispatch(new PrepareStreamMp4Job($this->record))->onQueue('high');
                     
                     Notification::make()
-                        ->title($result['success'] ? 'HLS Rebuild Queued' : 'Rebuild Failed')
-                        ->body($result['message'])
-                        ->color($result['success'] ? 'success' : 'danger')
+                        ->title('Full Reprocess Queued')
+                        ->body('Video will be fully reprocessed. Stream MP4 will be created first, then renditions.')
+                        ->success()
                         ->send();
                     
                     $this->record->refresh();
                 }),
-            Actions\DeleteAction::make(),
-        ];
-    }
-
-    /**
-     * Hook: Before filling form data - capture original state
-     */
-    protected function mutateFormDataBeforeFill(array $data): array
-    {
-        // Store original HLS enabled state
-        $this->originalHlsEnabled = $data['hls_enabled'] ?? false;
-        
-        return $data;
-    }
-
-    /**
-     * Hook: After saving - dispatch HLS job if toggle was switched ON
-     */
-    protected function afterSave(): void
-    {
-        /** @var Video $video */
-        $video = $this->record;
-        
-        // Check if HLS was just enabled (toggled from OFF to ON)
-        $hlsNowEnabled = $video->hls_enabled;
-        $wasDisabled = $this->originalHlsEnabled === false || $this->originalHlsEnabled === null;
-        
-        if ($hlsNowEnabled && $wasDisabled) {
-            // HLS was just enabled - check if we should dispatch
-            if ($video->can_generate_hls && $video->has_original) {
-                $hlsService = app(HlsService::class);
-                $result = $hlsService->enqueue($video, 'admin_toggle_enabled');
-                
-                if ($result['success']) {
+            
+            // Retry failed processing
+            Actions\Action::make('retryProcessing')
+                ->label('Retry Processing')
+                ->icon('heroicon-o-arrow-path')
+                ->color('warning')
+                ->visible(fn () => $this->record->processing_state === Video::PROCESSING_FAILED)
+                ->requiresConfirmation()
+                ->modalHeading('Retry Failed Processing')
+                ->modalDescription('This will clear the error and attempt to process the video again.')
+                ->action(function () {
+                    // Clear error state
+                    $this->record->update([
+                        'processing_state' => Video::PROCESSING_PENDING,
+                        'processing_progress' => 0,
+                        'processing_error' => null,
+                    ]);
+                    
+                    // Dispatch appropriate job
+                    if (!$this->record->stream_ready) {
+                        dispatch(new PrepareStreamMp4Job($this->record))->onQueue('high');
+                    } else {
+                        dispatch(new BuildRenditionsJob($this->record))->onQueue('default');
+                    }
+                    
                     Notification::make()
-                        ->title('HLS Transcoding Queued')
-                        ->body($result['message'])
+                        ->title('Processing Retry Queued')
+                        ->body('The video processing has been queued for retry.')
                         ->success()
                         ->send();
-                } else {
-                    Notification::make()
-                        ->title('HLS Queue Failed')
-                        ->body($result['message'])
-                        ->danger()
-                        ->send();
-                }
-            } elseif (!$video->has_original) {
-                Notification::make()
-                    ->title('HLS Enabled')
-                    ->body('HLS is enabled but no original video file found. Upload a video to enable transcoding.')
-                    ->warning()
-                    ->send();
-            } elseif ($video->isHlsReady()) {
-                Notification::make()
-                    ->title('HLS Already Ready')
-                    ->body('HLS is already processed for this video. Use "Rebuild HLS" to regenerate.')
-                    ->info()
-                    ->send();
-            }
-        }
-        
-        // Update original state for next save
-        $this->originalHlsEnabled = $video->hls_enabled;
+                    
+                    $this->record->refresh();
+                }),
+            
+            Actions\DeleteAction::make(),
+        ];
     }
 }

@@ -5,6 +5,7 @@ import laravel from 'laravel-vite-plugin';
 const codespaceName = process.env.CODESPACE_NAME;
 const isCodespaces = !!codespaceName;
 const codespacesHost = isCodespaces ? `${codespaceName}-5173.app.github.dev` : null;
+const appHost = isCodespaces ? `${codespaceName}-8000.app.github.dev` : null;
 
 export default defineConfig({
     plugins: [
@@ -14,10 +15,9 @@ export default defineConfig({
         }),
     ],
     server: {
-        host: true, // Listen on all addresses (0.0.0.0)
+        host: '0.0.0.0',
         port: 5173,
         strictPort: true,
-        cors: true,
         // Set origin for proper asset URLs in Codespaces
         origin: isCodespaces ? `https://${codespacesHost}` : undefined,
         hmr: isCodespaces
@@ -26,6 +26,14 @@ export default defineConfig({
                   protocol: 'wss',
                   host: codespacesHost,
                   clientPort: 443,
+              }
+            : undefined,
+        // Explicit CORS headers for Codespaces cross-origin requests
+        headers: isCodespaces
+            ? {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+                  'Access-Control-Allow-Headers': 'X-Requested-With, content-type, Authorization',
               }
             : undefined,
     },
