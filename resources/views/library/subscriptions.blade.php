@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-white mb-8">Subscriptions</h1>
 
         @if($channels->count() > 0)
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div class="pt-video-grid">
                 @foreach($channels as $channel)
                     <a href="{{ route('channel.show', $channel->username) }}" class="group bg-gray-800 rounded-xl p-6 text-center hover:bg-gray-750 transition-colors">
                         @if($channel->avatar_path)

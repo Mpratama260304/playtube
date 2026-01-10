@@ -97,6 +97,19 @@ class Video extends Model
             if (empty($video->slug)) {
                 $video->slug = Str::slug($video->title) . '-' . Str::random(8);
             }
+            // Auto-set published_at when creating with published status
+            if ($video->status === self::STATUS_PUBLISHED && empty($video->published_at)) {
+                $video->published_at = now();
+            }
+        });
+
+        static::updating(function ($video) {
+            // Auto-set published_at when status changes to published
+            if ($video->isDirty('status') && 
+                $video->status === self::STATUS_PUBLISHED && 
+                empty($video->published_at)) {
+                $video->published_at = now();
+            }
         });
     }
 

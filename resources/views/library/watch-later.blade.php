@@ -5,9 +5,17 @@
         <h1 class="text-2xl font-bold text-white mb-8">Watch Later</h1>
 
         @if($videos->count() > 0)
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {{-- Mobile: Compact row list --}}
+            <div class="block sm:hidden space-y-1">
                 @foreach($videos as $video)
-                    @include('components.video-card', ['video' => $video])
+                    <x-video-row :video="$video" />
+                @endforeach
+            </div>
+
+            {{-- Tablet & Desktop: Grid cards --}}
+            <div class="hidden sm:grid pt-video-grid">
+                @foreach($videos as $video)
+                    <x-video-card :video="$video" />
                 @endforeach
             </div>
 

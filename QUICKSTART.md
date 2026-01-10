@@ -241,6 +241,67 @@ playtube/
 | Quality switch | < 1 sec | Preserves time |
 | Mobile startup | < 3 sec | On 360p/480p |
 
+## Configuring Upload Limits
+
+Upload size is controlled at **three levels**:
+
+### 1. Site Settings (Admin Panel)
+
+Go to **Admin → Settings → Site Settings** and set "Max Upload Size (MB)". This controls Laravel validation.
+
+### 2. PHP Configuration
+
+PHP must also allow uploads this large. Edit your php.ini:
+
+```ini
+upload_max_filesize = 2G
+post_max_size = 2G
+max_execution_time = 3600
+memory_limit = 1G
+```
+
+**For Codespaces/DevContainers:**
+```bash
+# Find the PHP ini directory
+php -i | grep "Scan this dir"
+
+# Edit the uploads config (adjust path as needed)
+sudo nano /usr/local/php/8.3.14/ini/conf.d/99-uploads.ini
+```
+
+**For Docker:** Edit `docker/php.ini` and rebuild the container.
+
+### 3. Web Server (Nginx/Apache)
+
+**Nginx:**
+```nginx
+client_max_body_size 2G;
+client_body_timeout 3600s;
+```
+
+**Apache (.htaccess):**
+```apache
+php_value upload_max_filesize 2G
+php_value post_max_size 2G
+```
+
+### 4. Cloudflare/CDN Limits
+
+If using Cloudflare:
+- **Free plan**: 100MB max upload
+- **Pro plan**: 200MB max upload
+- **Business+**: 500MB+ max upload
+
+Consider bypassing Cloudflare for upload routes or upgrading your plan.
+
+### System Health Check
+
+Go to **Admin → System → System Health** to see:
+- Current PHP limits
+- Site Settings value
+- Effective upload limit (lowest of all)
+- Warnings if settings are mismatched
+
 ## Next Steps
 
 1. **Upload Test Videos**: Upload videos of different sizes and resolutions

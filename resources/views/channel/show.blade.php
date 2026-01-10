@@ -84,9 +84,18 @@
     @if($videos->count() > 0)
         <div class="mb-8">
             <h2 class="text-lg font-bold text-white mb-4">Videos</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            
+            {{-- Mobile: Compact row list --}}
+            <div class="block sm:hidden space-y-1">
                 @foreach($videos as $video)
-                    @include('components.video-card', ['video' => $video])
+                    <x-video-row :video="$video" />
+                @endforeach
+            </div>
+
+            {{-- Tablet & Desktop: Grid cards --}}
+            <div class="hidden sm:grid pt-video-grid">
+                @foreach($videos as $video)
+                    <x-video-card :video="$video" />
                 @endforeach
             </div>
 
@@ -109,7 +118,7 @@
     @if($playlists->count() > 0)
         <div class="mt-8">
             <h2 class="text-lg font-bold text-white mb-4">Playlists</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div class="pt-video-grid">
                 @foreach($playlists as $playlist)
                     <a href="{{ route('playlists.show', $playlist) }}" class="group">
                         <div class="relative aspect-video bg-gray-800 rounded-xl overflow-hidden mb-3">

@@ -28,11 +28,43 @@
     <!-- Alpine.js cloak style -->
     <style>
         [x-cloak] { display: none !important; }
+        
+        /* Navigation loading bar */
+        #nav-loading-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+            z-index: 9999;
+            transition: width 0.2s ease;
+            pointer-events: none;
+        }
+        #nav-loading-bar.loading {
+            animation: nav-loading 1s ease-in-out infinite;
+        }
+        @keyframes nav-loading {
+            0% { width: 0; }
+            50% { width: 70%; }
+            100% { width: 90%; }
+        }
+        #nav-loading-bar.complete {
+            width: 100%;
+            transition: width 0.1s ease, opacity 0.3s ease 0.1s;
+            opacity: 0;
+        }
     </style>
 
     @stack('styles')
 </head>
-<body class="font-sans antialiased bg-white dark:bg-[#0f0f0f] text-gray-900 dark:text-gray-100">
+<body class="font-sans antialiased bg-white dark:bg-[#0f0f0f] text-gray-900 dark:text-gray-100" 
+      x-data="{ bodyScrollLock: false }"
+      :class="{ 'body-scroll-lock': bodyScrollLock }">
+    
+    {{-- Navigation Loading Bar --}}
+    <div id="nav-loading-bar"></div>
+    
     <div 
         class="min-h-screen" 
         x-data="{
@@ -42,6 +74,12 @@
             mobileSearchQuery: '',
             
             init() {
+                // Watch for mobile sidebar changes to lock/unlock body scroll
+                this.$watch('mobileSidebarOpen', (open) => {
+                    this.$root.parentElement.bodyScrollLock = open;
+                    document.body.classList.toggle('body-scroll-lock', open);
+                });
+                
                 window.addEventListener('resize', () => {
                     if (window.innerWidth >= 1024) {
                         this.mobileSidebarOpen = false;
@@ -182,20 +220,23 @@
 
             <!-- Main Content Area -->
             <div 
-                class="flex-1 flex flex-col min-h-screen transition-all duration-200"
+                class="flex-1 flex flex-col min-h-screen transition-all duration-200 min-w-0"
                 :class="sidebarOpen ? 'lg:ml-60' : 'lg:ml-[72px]'"
             >
                 <!-- Header -->
                 @include('layouts.partials.header')
 
                 <!-- Page Content -->
-                <main class="flex-1 pt-14 sm:pt-16">
-                    <div class="px-2 py-3 sm:px-4 sm:py-6 lg:px-6">
+                <main class="flex-1 pt-14 sm:pt-16 pb-20 md:pb-0 overflow-x-hidden">
+                    <div class="px-3 py-3 sm:px-4 sm:py-4 md:px-6 md:py-6 w-full">
                         {{ $slot }}
                     </div>
                 </main>
             </div>
         </div>
+
+        {{-- Mobile Bottom Navigation --}}
+        @include('layouts.partials.mobile-bottom-nav')
     </div>
 
     <!-- Share Modal -->
@@ -295,6 +336,126 @@
             }
         };
     }
+    </script>
+
+    {{-- Instant Click - Preload pages on hover for faster navigation --}}
+    <script>
+    (function() {
+        const prefetchedUrls = new Set();
+        let mouseoverTimer = null;
+        
+        // Prefetch a URL
+        function prefetch(url) {
+            if (prefetchedUrls.has(url)) return;
+            if (url.startsWith('#') || url.startsWith('javascript:')) return;
+            
+            // Only prefetch same-origin URLs
+            try {
+                const urlObj = new URL(url, window.location.origin);
+                if (urlObj.origin !== window.location.origin) return;
+            } catch (e) {
+                return;
+            }
+            
+            prefetchedUrls.add(url);
+            
+            // Use link prefetch (most compatible)
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.href = url;
+            link.as = 'document';
+            document.head.appendChild(link);
+        }
+        
+        // Handle mouseover on links
+        document.addEventListener('mouseover', function(e) {
+            const link = e.target.closest('a[href]');
+            if (!link) return;
+            
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            
+            // Clear existing timer
+            if (mouseoverTimer) clearTimeout(mouseoverTimer);
+            
+            // Delay prefetch by 65ms to avoid unnecessary prefetches on quick mouse movements
+            mouseoverTimer = setTimeout(() => {
+                prefetch(href);
+            }, 65);
+        });
+        
+        // Cancel prefetch on mouseout
+        document.addEventListener('mouseout', function(e) {
+            if (mouseoverTimer) {
+                clearTimeout(mouseoverTimer);
+                mouseoverTimer = null;
+            }
+        });
+        
+        // Also prefetch on touchstart for mobile (user is likely to tap)
+        document.addEventListener('touchstart', function(e) {
+            const link = e.target.closest('a[href]');
+            if (!link) return;
+            
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+            
+            prefetch(href);
+        }, { passive: true });
+        
+        // Prefetch visible links in viewport (for related videos)
+        if ('IntersectionObserver' in window) {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const link = entry.target;
+                        const href = link.getAttribute('href');
+                        if (href) {
+                            // Delay prefetch for viewport links
+                            setTimeout(() => prefetch(href), 100);
+                        }
+                        observer.unobserve(link);
+                    }
+                });
+            }, { rootMargin: '50px' });
+            
+            // Observe video links after DOM is ready
+            setTimeout(() => {
+                document.querySelectorAll('a[href*="/watch/"]').forEach(link => {
+                    observer.observe(link);
+                });
+            }, 1000);
+        }
+        
+        // Navigation loading bar
+        const loadingBar = document.getElementById('nav-loading-bar');
+        
+        document.addEventListener('click', function(e) {
+            const link = e.target.closest('a[href]');
+            if (!link || link.hasAttribute('target') || link.hasAttribute('download')) return;
+            
+            const href = link.getAttribute('href');
+            if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) return;
+            
+            // Check if it's same origin
+            try {
+                const url = new URL(href, window.location.origin);
+                if (url.origin !== window.location.origin) return;
+            } catch (e) {
+                return;
+            }
+            
+            // Show loading bar
+            loadingBar.classList.remove('complete');
+            loadingBar.classList.add('loading');
+        });
+        
+        // Complete loading bar when page is about to unload
+        window.addEventListener('beforeunload', function() {
+            loadingBar.classList.remove('loading');
+            loadingBar.classList.add('complete');
+        });
+    })();
     </script>
 
     @stack('scripts')

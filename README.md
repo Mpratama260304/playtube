@@ -22,12 +22,25 @@ A complete video sharing platform similar to YouTube/PlayTube, built with Larave
 
 ### Admin Panel (Filament)
 - 👥 **User Management** - CRUD users, assign roles, ban/unban
-- 🎬 **Video Management** - Moderate videos, change status
+- 🎬 **Video Management** - Moderate videos, change status, process videos
 - 📁 **Category Management** - Manage video categories
 - 💬 **Comment Moderation** - Review and moderate comments
 - 🚩 **Report Management** - Handle user reports
 - ⚙️ **Site Settings** - Configure site name, upload limits, registration
 - 🔐 **Admin Account** - Change admin username and password
+
+### Video Player Features
+- 🎬 **Adaptive Quality** - Auto-selects quality based on device (1080p desktop, 480p mobile)
+- ⚙️ **Quality Selector** - Manual quality selection (360p, 480p, 720p, 1080p)
+- 🔄 **Auto Downshift** - Automatically reduces quality when buffering detected
+- 📺 **YouTube-style Description** - Expandable description with "...selengkapnya" button
+- 🖼️ **Loading Skeleton** - Shows thumbnail while video loads
+- ⚡ **Prefetch on Hover** - Pre-loads next video when hovering over thumbnails
+
+### Responsive Design
+- 📱 **Mobile** - List view layout, optimized touch targets, scrollable actions
+- 💻 **Desktop** - Grid layout, hover effects, keyboard shortcuts
+- 🎯 **Video Cards** - 2-line title clamp with hover tooltip for full title
 
 ## Tech Stack
 
@@ -37,6 +50,8 @@ A complete video sharing platform similar to YouTube/PlayTube, built with Larave
 - **Database**: SQLite (default)
 - **Frontend**: Blade, Tailwind CSS, Alpine.js
 - **Build Tool**: Vite
+- **Queue**: Database driver with Supervisor
+- **Video Processing**: FFmpeg
 
 ## System Requirements
 
@@ -268,13 +283,35 @@ php artisan app:doctor
 
 ## Video Processing
 
-Videos are processed in the background using Laravel Queue. Run the queue worker:
+Videos are processed in the background using Laravel Queue. The queue worker is automatically started via Supervisor in Docker.
 
-```bash
-php artisan queue:work
+### Queue Workers (via Supervisor)
+
+The application uses Supervisor to manage queue workers in production:
+
+```ini
+[program:laravel-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/html/artisan queue:work database --sleep=3 --tries=3 --max-time=3600
+numprocs=2
+autostart=true
+autorestart=true
 ```
 
-For production, use a process manager like Supervisor.
+### Video Processing Actions (Admin Panel)
+
+In the Filament admin panel, you have two options for video processing:
+
+1. **Prepare Stream (Queue)** - Adds job to queue, processed by worker in background
+2. **Prepare Stream Now (Sync)** - Processes immediately, useful when queue worker is not running
+
+### Manual Queue Worker
+
+If not using Supervisor, run the queue worker manually:
+
+```bash
+php artisan queue:work --tries=3
+```
 
 ## Video Streaming Architecture
 

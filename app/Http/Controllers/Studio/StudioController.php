@@ -173,6 +173,23 @@ class StudioController extends Controller
      */
     public function ajaxStore(UploadVideoRequest $request)
     {
+        // Debug: Log upload request info
+        $contentLength = $request->header('Content-Length');
+        $hasVideoFile = $request->hasFile('video');
+        $videoFile = $request->file('video');
+        
+        \Log::info('Video upload request received', [
+            'user_id' => auth()->id(),
+            'content_length' => $contentLength,
+            'content_length_mb' => $contentLength ? round($contentLength / 1024 / 1024, 2) . 'MB' : 'N/A',
+            'has_video_file' => $hasVideoFile,
+            'video_size' => $videoFile ? $videoFile->getSize() : null,
+            'video_size_mb' => $videoFile ? round($videoFile->getSize() / 1024 / 1024, 2) . 'MB' : 'N/A',
+            'video_mime' => $videoFile ? $videoFile->getMimeType() : null,
+            'php_upload_max_filesize' => ini_get('upload_max_filesize'),
+            'php_post_max_size' => ini_get('post_max_size'),
+        ]);
+
         try {
             $video = $this->videoService->createVideo(
                 $request->validated(),

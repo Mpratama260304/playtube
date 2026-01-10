@@ -8,6 +8,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ShortsController;
 use App\Http\Controllers\ChannelController;
 use App\Http\Controllers\Studio\StudioController;
+use App\Http\Controllers\Studio\ChunkedUploadController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\NotificationController;
@@ -85,6 +86,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/upload', [StudioController::class, 'upload'])->name('upload');
         Route::post('/upload', [StudioController::class, 'store'])->name('store');
         Route::post('/upload/ajax', [StudioController::class, 'ajaxStore'])->name('store.ajax');
+        
+        // Chunked upload endpoints (for large files / proxy bypass)
+        Route::post('/upload/chunked/init', [ChunkedUploadController::class, 'init'])->name('chunked.init');
+        Route::post('/upload/chunked/chunk', [ChunkedUploadController::class, 'chunk'])->name('chunked.chunk');
+        Route::post('/upload/chunked/complete', [ChunkedUploadController::class, 'complete'])->name('chunked.complete');
+        Route::post('/upload/chunked/abort', [ChunkedUploadController::class, 'abort'])->name('chunked.abort');
+        
         Route::get('/videos', [StudioController::class, 'videos'])->name('videos');
         Route::get('/videos/{video}/edit', [StudioController::class, 'edit'])->name('edit');
         Route::get('/videos/{video}/status', [StudioController::class, 'uploadStatus'])->name('status');

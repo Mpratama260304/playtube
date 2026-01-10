@@ -57,7 +57,14 @@ class VideoResource extends Resource
                                 'published' => 'Published',
                                 'failed' => 'Failed',
                             ])
-                            ->required(),
+                            ->required()
+                            ->reactive()
+                            ->afterStateUpdated(function ($state, callable $set, $record) {
+                                // Auto-set published_at when changing to published and it's empty
+                                if ($state === 'published' && $record && empty($record->published_at)) {
+                                    $set('published_at', now());
+                                }
+                            }),
                         Forms\Components\Select::make('visibility')
                             ->options([
                                 'public' => 'Public',
@@ -65,6 +72,10 @@ class VideoResource extends Resource
                                 'private' => 'Private',
                             ])
                             ->required(),
+                        Forms\Components\DateTimePicker::make('published_at')
+                            ->label('Published At')
+                            ->helperText('Required for video to appear on homepage. Auto-set when status is "Published".')
+                            ->nullable(),
                         Forms\Components\Toggle::make('is_short')
                             ->label('Is Short'),
                         Forms\Components\Toggle::make('is_featured')
@@ -272,6 +283,19 @@ class VideoResource extends Resource
         
         $queueConnection = config('queue.default');
         
+        // Check for stuck jobs (queued for more than 10 minutes without progress)
+        $stuckVideos = Video::where('processing_state', Video::PROCESSING_QUEUED)
+            ->where('updated_at', '<', now()->subMinutes(10))
+            ->count();
+        
+        // Get pending jobs count from database queue
+        $pendingJobs = 0;
+        try {
+            $pendingJobs = \Illuminate\Support\Facades\DB::table('jobs')->count();
+        } catch (\Exception $e) {
+            // Ignore if jobs table doesn't exist
+        }
+        
         return [
             'ffmpeg_available' => $ffmpegAvailable,
             'ffmpeg_path' => $ffmpegPath,
@@ -284,10 +308,10 @@ class VideoResource extends Resource
             'queue_stats' => [
                 'videos_queued' => Video::where('processing_state', Video::PROCESSING_QUEUED)->count(),
                 'videos_processing' => Video::where('processing_state', Video::PROCESSING_RUNNING)->count(),
-                'videos_stuck' => 0,
-                'pending_jobs' => 0,
+                'videos_stuck' => $stuckVideos,
+                'pending_jobs' => $pendingJobs,
             ],
-            'warnings' => [],
+            'warnings' => $stuckVideos > 0 ? ['Some videos are stuck in queue. Queue worker may not be running!'] : [],
         ];
     }
 
@@ -337,14 +361,20 @@ class VideoResource extends Resource
         $lines[] = '**Processing Status:**';
         $lines[] = "- Videos Queued: {$stats['videos_queued']}";
         $lines[] = "- Videos Processing: {$stats['videos_processing']}";
+        $lines[] = "- Pending Jobs in DB: {$stats['pending_jobs']}";
+        if ($stats['videos_stuck'] > 0) {
+            $lines[] = "- ⚠️ Stuck Videos: {$stats['videos_stuck']} (queued >10min)";
+        }
         
         // Warnings
         if (!empty($health['warnings'])) {
             $lines[] = '';
-            $lines[] = '**Warnings:**';
+            $lines[] = '**⚠️ Warnings:**';
             foreach ($health['warnings'] as $warning) {
-                $lines[] = "- ⚠️ {$warning}";
+                $lines[] = "- {$warning}";
             }
+            $lines[] = '';
+            $lines[] = '**💡 Tip:** Use "Process Now" option in actions to process immediately without queue worker.';
         }
         
         return new \Illuminate\Support\HtmlString(
@@ -465,20 +495,51 @@ class VideoResource extends Resource
                     ->visible(fn (Video $record) => $record->has_original && !$record->stream_ready && !in_array($record->processing_state, [Video::PROCESSING_QUEUED, Video::PROCESSING_RUNNING]))
                     ->requiresConfirmation()
                     ->modalHeading('Prepare Stream MP4')
-                    ->modalDescription('This will create a fast-start MP4 for instant playback. Make sure a queue worker is running.')
-                    ->action(function (Video $record) {
+                    ->modalDescription('This will create a fast-start MP4 for instant playback. Choose how to process:')
+                    ->form([
+                        \Filament\Forms\Components\Radio::make('process_mode')
+                            ->label('Processing Mode')
+                            ->options([
+                                'queue' => '⏳ Queue (Background) - Uses queue worker',
+                                'sync' => '⚡ Process Now (Immediate) - Runs directly, may take a while',
+                            ])
+                            ->default('sync')
+                            ->required(),
+                    ])
+                    ->action(function (Video $record, array $data) {
                         $record->update([
                             'processing_state' => Video::PROCESSING_QUEUED,
                             'processing_error' => null,
                         ]);
                         
-                        PrepareStreamMp4Job::dispatch($record);
-                        
-                        \Filament\Notifications\Notification::make()
-                            ->title('Stream Preparation Queued')
-                            ->body('Video will be processed shortly.')
-                            ->success()
-                            ->send();
+                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                            // Run synchronously (immediate)
+                            try {
+                                $record->update(['processing_state' => Video::PROCESSING_RUNNING]);
+                                dispatch_sync(new PrepareStreamMp4Job($record));
+                                
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Stream Prepared!')
+                                    ->body('Video is now ready for playback.')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $e) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Processing Failed')
+                                    ->body($e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        } else {
+                            // Queue for background processing
+                            PrepareStreamMp4Job::dispatch($record);
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Stream Preparation Queued')
+                                ->body('Video will be processed shortly. Make sure queue worker is running.')
+                                ->success()
+                                ->send();
+                        }
                     }),
                 Tables\Actions\Action::make('buildRenditions')
                     ->label('Build Renditions')
@@ -488,14 +549,42 @@ class VideoResource extends Resource
                     ->requiresConfirmation()
                     ->modalHeading('Build Quality Renditions')
                     ->modalDescription('This will create multiple quality versions (360p, 480p, 720p, 1080p).')
-                    ->action(function (Video $record) {
-                        BuildRenditionsJob::dispatch($record);
-                        
-                        \Filament\Notifications\Notification::make()
-                            ->title('Rendition Build Queued')
-                            ->body('Quality versions will be generated.')
-                            ->success()
-                            ->send();
+                    ->form([
+                        \Filament\Forms\Components\Radio::make('process_mode')
+                            ->label('Processing Mode')
+                            ->options([
+                                'queue' => '⏳ Queue (Background)',
+                                'sync' => '⚡ Process Now (Immediate)',
+                            ])
+                            ->default('sync')
+                            ->required(),
+                    ])
+                    ->action(function (Video $record, array $data) {
+                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                            try {
+                                dispatch_sync(new BuildRenditionsJob($record));
+                                
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Renditions Built!')
+                                    ->body('Multiple quality versions are now available.')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $e) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Build Failed')
+                                    ->body($e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        } else {
+                            BuildRenditionsJob::dispatch($record);
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Rendition Build Queued')
+                                ->body('Quality versions will be generated.')
+                                ->success()
+                                ->send();
+                        }
                     }),
                 Tables\Actions\Action::make('retryProcessing')
                     ->label('Retry')
@@ -504,8 +593,18 @@ class VideoResource extends Resource
                     ->visible(fn (Video $record) => $record->has_original && $record->processing_state === Video::PROCESSING_FAILED)
                     ->requiresConfirmation()
                     ->modalHeading('Retry Processing')
-                    ->modalDescription('This will clear the error and queue processing again.')
-                    ->action(function (Video $record) {
+                    ->modalDescription('This will clear the error and process the video again.')
+                    ->form([
+                        \Filament\Forms\Components\Radio::make('process_mode')
+                            ->label('Processing Mode')
+                            ->options([
+                                'queue' => '⏳ Queue (Background)',
+                                'sync' => '⚡ Process Now (Immediate)',
+                            ])
+                            ->default('sync')
+                            ->required(),
+                    ])
+                    ->action(function (Video $record, array $data) {
                         $record->update([
                             'processing_state' => Video::PROCESSING_QUEUED,
                             'processing_progress' => null,
@@ -514,13 +613,32 @@ class VideoResource extends Resource
                             'stream_path' => null,
                         ]);
                         
-                        PrepareStreamMp4Job::dispatch($record);
-                        
-                        \Filament\Notifications\Notification::make()
-                            ->title('Retry Queued')
-                            ->body('Processing will restart shortly.')
-                            ->success()
-                            ->send();
+                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                            try {
+                                $record->update(['processing_state' => Video::PROCESSING_RUNNING]);
+                                dispatch_sync(new PrepareStreamMp4Job($record));
+                                
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Processing Complete!')
+                                    ->body('Video is now ready.')
+                                    ->success()
+                                    ->send();
+                            } catch (\Exception $e) {
+                                \Filament\Notifications\Notification::make()
+                                    ->title('Processing Failed')
+                                    ->body($e->getMessage())
+                                    ->danger()
+                                    ->send();
+                            }
+                        } else {
+                            PrepareStreamMp4Job::dispatch($record);
+                            
+                            \Filament\Notifications\Notification::make()
+                                ->title('Retry Queued')
+                                ->body('Processing will restart shortly.')
+                                ->success()
+                                ->send();
+                        }
                     }),
                 Tables\Actions\Action::make('viewLogs')
                     ->label('View Logs')

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Setting;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -31,8 +32,10 @@ class UploadVideoRequest extends FormRequest
 
     public function rules(): array
     {
-        // Max size in KB (512MB = 524288 KB)
-        $maxSizeKb = config('playtube.upload.max_size_kb', 524288);
+        // Get max upload size from Site Settings (MB), convert to KB
+        // Fallback to config, then to 512MB default
+        $maxSizeMb = (int) Setting::get('max_upload_size', config('playtube.upload.max_size_kb', 524288) / 1024);
+        $maxSizeKb = $maxSizeMb * 1024; // Convert MB to KB for Laravel validation
         
         return [
             'title' => ['required', 'string', 'max:255'],
@@ -53,10 +56,13 @@ class UploadVideoRequest extends FormRequest
 
     public function messages(): array
     {
+        // Get max upload size from Site Settings for error message
+        $maxSizeMb = (int) Setting::get('max_upload_size', 512);
+        
         return [
             'video.required' => 'Please select a video file to upload.',
             'video.mimetypes' => 'The video must be a valid video file (MP4, MOV, AVI, WebM, or MKV).',
-            'video.max' => 'The video file size cannot exceed 512MB.',
+            'video.max' => "The video file size cannot exceed {$maxSizeMb}MB.",
             'title.required' => 'Please provide a title for your video.',
             'thumbnail.image' => 'The thumbnail must be an image file.',
             'thumbnail.max' => 'The thumbnail cannot exceed 5MB.',

@@ -4,7 +4,7 @@
     <div class="max-w-7xl mx-auto">
         <h1 class="text-2xl font-bold text-white mb-8">Browse Categories</h1>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div class="pt-video-grid">
             @foreach($categories as $category)
                 <a href="{{ route('category.show', $category->slug) }}" class="group block bg-gray-800 rounded-xl p-6 hover:bg-gray-750 transition-colors">
                     <div class="flex items-center space-x-4">

@@ -256,6 +256,127 @@
     .skeleton {
         @apply bg-gray-200 dark:bg-gray-800 rounded animate-pulse;
     }
+
+    /* ===================================
+       PlayTube Video Grid System
+       YouTube-clone style responsive grid
+       Used for tablet (sm: 640px+) and desktop
+       Mobile uses video-row list instead
+       =================================== */
+    
+    /* Base grid - starts at sm breakpoint (640px) */
+    .pt-video-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px 12px;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    /* 3 columns: 768px+ */
+    @media (min-width: 768px) {
+        .pt-video-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 20px 16px;
+        }
+    }
+
+    /* 4 columns: 1024px+ */
+    @media (min-width: 1024px) {
+        .pt-video-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 24px 16px;
+        }
+    }
+
+    /* 5 columns: 1280px+ */
+    @media (min-width: 1280px) {
+        .pt-video-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 24px 16px;
+        }
+    }
+
+    /* 6 columns: 1536px+ */
+    @media (min-width: 1536px) {
+        .pt-video-grid {
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 24px 20px;
+        }
+    }
+
+    /* Compact video row for related videos on mobile */
+    .pt-video-row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .pt-video-row-thumb {
+        flex-shrink: 0;
+        width: 168px;
+        aspect-ratio: 16/9;
+        border-radius: 8px;
+        overflow: hidden;
+        background: var(--color-bg-tertiary);
+    }
+
+    .pt-video-row-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Mobile bottom navigation */
+    .pt-bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        background: var(--color-bg-primary);
+        border-top: 1px solid var(--color-border);
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .pt-bottom-nav-inner {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        height: 56px;
+    }
+
+    .pt-bottom-nav-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 6px 12px;
+        color: var(--color-text-secondary);
+        text-decoration: none;
+        font-size: 10px;
+        font-weight: 500;
+        transition: color 0.15s ease;
+        min-width: 64px;
+    }
+
+    .pt-bottom-nav-item:hover,
+    .pt-bottom-nav-item.active {
+        color: var(--color-text-primary);
+    }
+
+    .pt-bottom-nav-item svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    /* Body scroll lock when mobile sidebar is open */
+    .body-scroll-lock {
+        overflow: hidden !important;
+        position: fixed;
+        width: 100%;
+        height: 100%;
+    }
 }
 
 /* ===================================

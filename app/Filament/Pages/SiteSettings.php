@@ -58,7 +58,8 @@ class SiteSettings extends Page
                             ->required()
                             ->minValue(1)
                             ->maxValue(10240)
-                            ->suffix('MB'),
+                            ->suffix('MB')
+                            ->helperText('Controls Laravel validation limit. Server limits (PHP upload_max_filesize, post_max_size, Nginx client_max_body_size) must also be configured to support this size. Check System Health page for current server limits.'),
                     ]),
 
                 Forms\Components\Section::make('Registration Settings')

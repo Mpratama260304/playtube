@@ -270,6 +270,12 @@
                 errorMessage: '',
                 xhr: null,
                 startTime: null,
+                uploadId: null,
+                abortController: null,
+                
+                // Chunked upload settings
+                CHUNK_SIZE: 5 * 1024 * 1024, // 5MB chunks
+                USE_CHUNKED: true, // Enable chunked upload by default
                 
                 formData: {
                     title: '{{ old('title') }}',
@@ -327,6 +333,156 @@
                 submitForm() {
                     if (!this.videoFile || this.uploading) return;
                     
+                    // Use chunked upload for files > 50MB or when USE_CHUNKED is true
+                    if (this.USE_CHUNKED || this.videoFile.size > 50 * 1024 * 1024) {
+                        this.chunkedUpload();
+                    } else {
+                        this.directUpload();
+                    }
+                },
+                
+                async chunkedUpload() {
+                    this.uploading = true;
+                    this.progress = 0;
+                    this.uploadError = false;
+                    this.uploadSuccess = false;
+                    this.startTime = Date.now();
+                    this.abortController = new AbortController();
+
+                    try {
+                        // Step 1: Initialize upload session
+                        const initResponse = await fetch('{{ route('studio.chunked.init') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                filename: this.videoFile.name,
+                                filesize: this.videoFile.size,
+                                mimetype: this.videoFile.type,
+                                title: this.formData.title,
+                                description: this.formData.description,
+                                category_id: this.formData.category_id,
+                                tags: this.formData.tags,
+                                visibility: this.formData.visibility,
+                                is_short: this.formData.is_short,
+                            }),
+                            signal: this.abortController.signal,
+                        });
+
+                        const initData = await initResponse.json();
+                        
+                        if (!initData.success) {
+                            throw new Error(initData.message || 'Failed to initialize upload');
+                        }
+
+                        this.uploadId = initData.upload_id;
+                        const chunkSize = initData.chunk_size || this.CHUNK_SIZE;
+                        const totalChunks = Math.ceil(this.videoFile.size / chunkSize);
+                        let uploadedBytes = 0;
+
+                        // Step 2: Upload chunks
+                        for (let i = 0; i < totalChunks; i++) {
+                            if (this.abortController.signal.aborted) {
+                                throw new Error('Upload cancelled');
+                            }
+
+                            const start = i * chunkSize;
+                            const end = Math.min(start + chunkSize, this.videoFile.size);
+                            const chunk = this.videoFile.slice(start, end);
+
+                            const chunkFormData = new FormData();
+                            chunkFormData.append('upload_id', this.uploadId);
+                            chunkFormData.append('chunk_index', i);
+                            chunkFormData.append('total_chunks', totalChunks);
+                            chunkFormData.append('chunk', chunk, `chunk_${i}`);
+
+                            const chunkResponse = await fetch('{{ route('studio.chunked.chunk') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json',
+                                },
+                                body: chunkFormData,
+                                signal: this.abortController.signal,
+                            });
+
+                            const chunkData = await chunkResponse.json();
+                            
+                            if (!chunkData.success) {
+                                throw new Error(chunkData.message || `Failed to upload chunk ${i}`);
+                            }
+
+                            uploadedBytes += (end - start);
+                            this.progress = Math.round((uploadedBytes / this.videoFile.size) * 100);
+                            
+                            // Calculate speed and remaining time
+                            const elapsed = (Date.now() - this.startTime) / 1000;
+                            if (elapsed > 0) {
+                                const bytesPerSecond = uploadedBytes / elapsed;
+                                this.uploadSpeed = this.formatFileSize(bytesPerSecond) + '/s';
+                                
+                                const remaining = this.videoFile.size - uploadedBytes;
+                                const secondsLeft = remaining / bytesPerSecond;
+                                this.remainingTime = this.formatTime(secondsLeft);
+                            }
+                        }
+
+                        // Step 3: Complete upload
+                        const completeResponse = await fetch('{{ route('studio.chunked.complete') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                upload_id: this.uploadId,
+                            }),
+                            signal: this.abortController.signal,
+                        });
+
+                        const completeData = await completeResponse.json();
+                        
+                        if (!completeData.success) {
+                            throw new Error(completeData.message || 'Failed to complete upload');
+                        }
+
+                        this.uploading = false;
+                        this.uploadSuccess = true;
+                        this.successMessage = completeData.message;
+                        
+                        // Redirect after short delay
+                        setTimeout(() => {
+                            window.location.href = completeData.redirect;
+                        }, 1500);
+
+                    } catch (error) {
+                        this.uploading = false;
+                        
+                        if (error.name === 'AbortError' || error.message === 'Upload cancelled') {
+                            // User cancelled - abort on server
+                            if (this.uploadId) {
+                                fetch('{{ route('studio.chunked.abort') }}', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    },
+                                    body: JSON.stringify({ upload_id: this.uploadId }),
+                                });
+                            }
+                            this.progress = 0;
+                        } else {
+                            this.uploadError = true;
+                            this.errorMessage = error.message || 'Upload failed. Please try again.';
+                        }
+                    }
+                },
+                
+                directUpload() {
                     this.uploading = true;
                     this.progress = 0;
                     this.uploadError = false;
@@ -408,6 +564,12 @@
                 },
 
                 cancelUpload() {
+                    // Cancel chunked upload
+                    if (this.abortController) {
+                        this.abortController.abort();
+                        this.abortController = null;
+                    }
+                    // Cancel direct upload
                     if (this.xhr) {
                         this.xhr.abort();
                         this.xhr = null;
