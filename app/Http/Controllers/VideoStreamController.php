@@ -100,30 +100,56 @@ class VideoStreamController extends Controller
 
     /**
      * Stream HLS playlist or segment
+     * Supports nested paths like v720/index.m3u8, v720/seg_00001.ts
      */
-    public function streamHls(Request $request, Video $video, string $file)
+    public function streamHls(Request $request, Video $video, string $path)
     {
         // Check if video can be viewed
         if (!$video->canBeViewedBy(auth()->user())) {
             abort(404);
         }
 
-        // Sanitize file path to prevent directory traversal
-        $file = basename($file);
+        // Sanitize path to prevent directory traversal attacks
+        // Only allow alphanumeric, underscores, hyphens, dots, and forward slashes
+        if (!preg_match('/^[\w\-\.\/]+$/', $path)) {
+            abort(400, 'Invalid path');
+        }
+
+        // Normalize the path and ensure no traversal
+        $normalizedPath = preg_replace('#/+#', '/', $path);
+        $parts = explode('/', $normalizedPath);
+        $safeParts = [];
+        
+        foreach ($parts as $part) {
+            if ($part === '..' || $part === '.' || $part === '') {
+                continue;
+            }
+            // Additional safety: each segment must be a valid filename
+            if (!preg_match('/^[\w\-\.]+$/', $part)) {
+                abort(400, 'Invalid path segment');
+            }
+            $safeParts[] = $part;
+        }
+        
+        if (empty($safeParts)) {
+            abort(400, 'Invalid path');
+        }
+        
+        $safePath = implode('/', $safeParts);
         $hlsDir = "videos/{$video->uuid}/hls";
-        $path = "{$hlsDir}/{$file}";
+        $fullRelativePath = "{$hlsDir}/{$safePath}";
 
         $disk = Storage::disk('public');
         
-        if (!$disk->exists($path)) {
+        if (!$disk->exists($fullRelativePath)) {
             abort(404, 'HLS file not found');
         }
 
-        $fullPath = $disk->path($path);
+        $fullPath = $disk->path($fullRelativePath);
         $content = file_get_contents($fullPath);
         
-        // Determine content type
-        $extension = pathinfo($file, PATHINFO_EXTENSION);
+        // Determine content type based on file extension
+        $extension = pathinfo($safePath, PATHINFO_EXTENSION);
         $contentType = match($extension) {
             'm3u8' => 'application/vnd.apple.mpegurl',
             'ts' => 'video/mp2t',

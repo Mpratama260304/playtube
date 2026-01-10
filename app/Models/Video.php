@@ -23,11 +23,12 @@ class Video extends Model
     public const VISIBILITY_UNLISTED = 'unlisted';
     public const VISIBILITY_PRIVATE = 'private';
 
-    // Processing states (for background optimization, NOT for blocking publish)
-    public const PROCESSING_PENDING = 'pending';
-    public const PROCESSING_RUNNING = 'processing';
-    public const PROCESSING_READY = 'ready';
-    public const PROCESSING_FAILED = 'failed';
+    // Processing states (standardized values for HLS state machine)
+    public const PROCESSING_PENDING = 'pending';   // Default/initial state
+    public const PROCESSING_QUEUED = 'queued';     // Job dispatched, waiting for worker
+    public const PROCESSING_RUNNING = 'processing'; // Job actively running (ffmpeg started)
+    public const PROCESSING_READY = 'ready';       // Successfully completed
+    public const PROCESSING_FAILED = 'failed';     // Failed with error
 
     protected $fillable = [
         'uuid',
@@ -44,8 +45,15 @@ class Video extends Model
         'original_path',
         'hls_master_path',
         'thumbnail_path',
+        'hls_enabled',
         'processing_error',
-        'processing_state',  // Track background processing separately
+        'processing_state',
+        'processing_progress',
+        'processing_started_at',
+        'processing_finished_at',
+        'hls_queued_at',
+        'hls_started_at',
+        'hls_last_heartbeat_at',
         'views_count',
         'likes_count',
         'dislikes_count',
@@ -57,13 +65,20 @@ class Video extends Model
     protected $casts = [
         'is_short' => 'boolean',
         'is_featured' => 'boolean',
+        'hls_enabled' => 'boolean',
         'published_at' => 'datetime',
         'processed_at' => 'datetime',
+        'processing_started_at' => 'datetime',
+        'processing_finished_at' => 'datetime',
+        'hls_queued_at' => 'datetime',
+        'hls_started_at' => 'datetime',
+        'hls_last_heartbeat_at' => 'datetime',
         'views_count' => 'integer',
         'likes_count' => 'integer',
         'dislikes_count' => 'integer',
         'comments_count' => 'integer',
         'duration_seconds' => 'integer',
+        'processing_progress' => 'integer',
     ];
 
     protected static function boot()
@@ -115,6 +130,11 @@ class Video extends Model
     {
         return $this->belongsToMany(Playlist::class, 'playlist_videos')
             ->withPivot('position', 'created_at');
+    }
+
+    public function processingLogs(): HasMany
+    {
+        return $this->hasMany(VideoProcessingLog::class)->orderBy('created_at', 'desc');
     }
 
     public function getRouteKeyName(): string
@@ -235,13 +255,148 @@ class Video extends Model
 
     /**
      * Get the HLS master playlist URL using relative path.
+     * Uses streaming route for authenticated access.
      */
     public function getHlsUrlAttribute(): ?string
     {
         if ($this->hls_master_path && Storage::disk('public')->exists($this->hls_master_path)) {
-            return '/storage/' . $this->hls_master_path;
+            // Use streaming route for better control
+            return '/stream/' . $this->uuid . '/hls/master.m3u8';
         }
         return null;
+    }
+
+    /**
+     * Check if HLS is ready for playback - SINGLE SOURCE OF TRUTH.
+     * HLS is only ready if:
+     * 1. hls_master_path is set
+     * 2. The master playlist file actually exists on disk
+     */
+    public function isHlsReady(): bool
+    {
+        if (empty($this->hls_master_path)) {
+            return false;
+        }
+        return Storage::disk('public')->exists($this->hls_master_path);
+    }
+
+    /**
+     * Accessor for is_hls_ready - delegates to isHlsReady() method.
+     */
+    public function getIsHlsReadyAttribute(): bool
+    {
+        return $this->isHlsReady();
+    }
+
+    /**
+     * Alias for blade compatibility: $video->hls_ready
+     */
+    public function getHlsReadyAttribute(): bool
+    {
+        return $this->isHlsReady();
+    }
+
+    /**
+     * Check if HLS master file exists on disk (same as isHlsReady but more explicit).
+     */
+    public function getHlsMasterExistsAttribute(): bool
+    {
+        return $this->isHlsReady();
+    }
+
+    /**
+     * Check if HLS is currently being processed (queued OR actively processing).
+     */
+    public function getIsHlsProcessingAttribute(): bool
+    {
+        return in_array($this->processing_state, [self::PROCESSING_QUEUED, self::PROCESSING_RUNNING]);
+    }
+
+    /**
+     * Check if HLS job is queued but not yet started.
+     */
+    public function getIsHlsQueuedAttribute(): bool
+    {
+        return $this->processing_state === self::PROCESSING_QUEUED;
+    }
+
+    /**
+     * Check if HLS job is actively running (ffmpeg started).
+     */
+    public function getIsHlsRunningAttribute(): bool
+    {
+        return $this->processing_state === self::PROCESSING_RUNNING;
+    }
+
+    /**
+     * Check if the heartbeat is stale (no update for > 2 minutes).
+     */
+    public function getIsHeartbeatStaleAttribute(): bool
+    {
+        if (!$this->hls_last_heartbeat_at) {
+            return false;
+        }
+        return $this->hls_last_heartbeat_at->diffInSeconds(now()) > 120;
+    }
+
+    /**
+     * Check if video appears stuck in queue (queued for > 2 minutes).
+     */
+    public function getIsStuckInQueueAttribute(): bool
+    {
+        if ($this->processing_state !== self::PROCESSING_QUEUED) {
+            return false;
+        }
+        if (!$this->hls_queued_at) {
+            return false;
+        }
+        return $this->hls_queued_at->diffInSeconds(now()) > 120;
+    }
+
+    /**
+     * Check if video appears stuck in processing (heartbeat stale while processing).
+     */
+    public function getIsStuckInProcessingAttribute(): bool
+    {
+        if ($this->processing_state !== self::PROCESSING_RUNNING) {
+            return false;
+        }
+        return $this->is_heartbeat_stale;
+    }
+
+    /**
+     * Get HLS status label for UI display.
+     */
+    public function getHlsStatusLabelAttribute(): string
+    {
+        if ($this->isHlsReady()) {
+            return 'ready';
+        }
+
+        return match ($this->processing_state) {
+            self::PROCESSING_QUEUED => $this->is_stuck_in_queue ? 'stuck_queued' : 'queued',
+            self::PROCESSING_RUNNING => $this->is_stuck_in_processing ? 'stuck_processing' : 'processing',
+            self::PROCESSING_FAILED => 'failed',
+            default => $this->hls_enabled ? 'pending' : 'disabled',
+        };
+    }
+
+    /**
+     * Check if HLS can be generated for this video.
+     */
+    public function getCanGenerateHlsAttribute(): bool
+    {
+        return $this->has_original 
+            && !$this->is_hls_processing 
+            && !$this->isHlsReady();
+    }
+
+    /**
+     * Get HLS directory path.
+     */
+    public function getHlsDirectoryAttribute(): string
+    {
+        return "videos/{$this->uuid}/hls";
     }
 
     public function getDurationFormattedAttribute(): string

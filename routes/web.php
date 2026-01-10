@@ -43,7 +43,9 @@ Route::get('/embed/{video:slug}', [VideoController::class, 'embed'])->name('vide
 
 // Video Streaming with Range support (for smooth playback/seeking)
 Route::get('/stream/{video:uuid}', [VideoStreamController::class, 'stream'])->name('video.stream');
-Route::get('/stream/{video:uuid}/hls/{file}', [VideoStreamController::class, 'streamHls'])->name('video.stream.hls');
+Route::get('/stream/{video:uuid}/hls/{path}', [VideoStreamController::class, 'streamHls'])
+    ->where('path', '.*')
+    ->name('video.stream.hls');
 
 // Search
 Route::get('/search', [SearchController::class, 'index'])->name('search');

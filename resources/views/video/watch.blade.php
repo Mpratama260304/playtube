@@ -15,15 +15,15 @@
     <meta name="twitter:image" content="{{ $video->thumbnail_url ? url($video->thumbnail_url) : url('/images/placeholder-thumb.svg') }}">
     @endsection
 
-    <div class="max-w-[1800px] mx-auto" x-data="videoPage()" x-init="init()">
-        <div class="flex flex-col lg:flex-row gap-6">
+    <div class="max-w-[1800px] mx-auto px-2 sm:px-4 lg:px-6" x-data="videoPage()" x-init="init()">
+        <div class="flex flex-col lg:flex-row gap-4 lg:gap-6">
             <!-- Main Content -->
             <div class="flex-1 min-w-0">
                 {{-- Processing Banner --}}
                 @if(($isOwner || $isAdmin) && $video->processing_state === 'pending')
                 <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4">
                     <div class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-blue-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-4 h-4 text-blue-400 animate-spin flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                         </svg>
                         <p class="text-blue-400 text-sm">Optimizing for better playback... Video is already published.</p>
@@ -31,8 +31,18 @@
                 </div>
                 @endif
 
+                {{-- HLS Upgrade Indicator --}}
+                <div x-show="isUsingHls" x-cloak class="bg-green-500/10 border border-green-500/30 rounded-xl p-2 mb-4">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <p class="text-green-400 text-xs">Adaptive streaming active • Quality adjusts to your connection</p>
+                    </div>
+                </div>
+
                 <!-- Video Player -->
-                <div class="relative aspect-video bg-black rounded-xl overflow-hidden mb-4" id="video-player-container">
+                <div class="relative aspect-video bg-black rounded-lg sm:rounded-xl overflow-hidden mb-4" id="video-player-container">
                     @if($video->original_path)
                         <video 
                             id="video-player"
@@ -52,7 +62,7 @@
                     @else
                         <div class="w-full h-full flex items-center justify-center bg-gray-900">
                             <div class="text-center">
-                                <svg class="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg class="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                 </svg>
                                 <p class="text-gray-400">Video not available</p>
@@ -63,18 +73,18 @@
 
                 <!-- Video Info -->
                 <div class="mb-4">
-                    <h1 class="text-xl font-bold text-gray-900 dark:text-white mb-3">{{ $video->title }}</h1>
+                    <h1 class="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-3 line-clamp-2 sm:line-clamp-none">{{ $video->title }}</h1>
                     
-                    <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                         <!-- Views & Date -->
-                        <div class="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                        <div class="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                             <span>{{ number_format($video->views_count ?? $video->views()->count()) }} views</span>
                             <span class="mx-2">•</span>
                             <span>{{ $video->created_at->format('M d, Y') }}</span>
                         </div>
 
                         <!-- Actions -->
-                        <div class="flex items-center gap-2 flex-wrap">
+                        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             @auth
                                 <!-- Like/Dislike -->
                                 <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-full" id="reaction-buttons">
@@ -82,23 +92,23 @@
                                         type="button"
                                         @click="react('like')"
                                         :class="{ 'text-blue-500': userReaction === 'like', 'text-gray-700 dark:text-gray-300': userReaction !== 'like' }"
-                                        class="flex items-center gap-2 px-4 py-2 rounded-l-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                        class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-l-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                         :disabled="reacting"
                                     >
-                                        <svg class="w-5 h-5" :fill="userReaction === 'like' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4 sm:w-5 sm:h-5" :fill="userReaction === 'like' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"/>
                                         </svg>
-                                        <span class="text-sm font-medium" x-text="formatNumber(likesCount)">{{ number_format($video->likes_count ?? 0) }}</span>
+                                        <span class="text-xs sm:text-sm font-medium" x-text="formatNumber(likesCount)">{{ number_format($video->likes_count ?? 0) }}</span>
                                     </button>
-                                    <div class="w-px h-6 bg-gray-200 dark:bg-gray-700"></div>
+                                    <div class="w-px h-5 sm:h-6 bg-gray-200 dark:bg-gray-700"></div>
                                     <button 
                                         type="button"
                                         @click="react('dislike')"
                                         :class="{ 'text-blue-500': userReaction === 'dislike', 'text-gray-700 dark:text-gray-300': userReaction !== 'dislike' }"
-                                        class="flex items-center px-4 py-2 rounded-r-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                        class="flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-r-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                         :disabled="reacting"
                                     >
-                                        <svg class="w-5 h-5" :fill="userReaction === 'dislike' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-4 h-4 sm:w-5 sm:h-5" :fill="userReaction === 'dislike' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5"/>
                                         </svg>
                                     </button>
@@ -107,12 +117,12 @@
                                 <!-- Share -->
                                 <button 
                                     @click="openShareModal()"
-                                    class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                    class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                 >
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
                                     </svg>
-                                    <span class="text-sm font-medium">Share</span>
+                                    <span class="text-xs sm:text-sm font-medium hidden xs:inline">Share</span>
                                 </button>
 
                                 <!-- Save (Watch Later) - AJAX -->
@@ -120,27 +130,27 @@
                                     type="button" 
                                     @click="toggleWatchLater()"
                                     :disabled="watchLaterLoading"
-                                    class="flex items-center gap-2 px-4 py-2 rounded-full text-gray-700 dark:text-gray-300 transition-colors"
+                                    class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-gray-700 dark:text-gray-300 transition-colors"
                                     :class="inWatchLater ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'"
                                 >
-                                    <svg class="w-5 h-5" :fill="inWatchLater ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="w-4 h-4 sm:w-5 sm:h-5" :fill="inWatchLater ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
                                     </svg>
-                                    <span class="text-sm font-medium hidden sm:inline" x-text="watchLaterLoading ? 'Saving...' : (inWatchLater ? 'Saved' : 'Save')"></span>
+                                    <span class="text-xs sm:text-sm font-medium hidden sm:inline" x-text="watchLaterLoading ? 'Saving...' : (inWatchLater ? 'Saved' : 'Save')"></span>
                                 </button>
                             @else
                                 <!-- Share (Guest) -->
                                 <button 
                                     @click="openShareModal()"
-                                    class="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                                    class="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                 >
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
                                     </svg>
-                                    <span class="text-sm font-medium">Share</span>
+                                    <span class="text-xs sm:text-sm font-medium">Share</span>
                                 </button>
-                                <a href="{{ route('login') }}" class="px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-sm font-medium transition-colors">
-                                    Sign in to like
+                                <a href="{{ route('login') }}" class="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 dark:bg-gray-800 rounded-full text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs sm:text-sm font-medium transition-colors">
+                                    Sign in
                                 </a>
                             @endauth
                         </div>
@@ -286,30 +296,30 @@
 
             <!-- Sidebar - Related Videos -->
             <div class="w-full lg:w-[400px] xl:w-[420px] flex-shrink-0">
-                <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4">Related Videos</h3>
-                <div class="space-y-3">
+                <h3 class="text-base font-bold text-gray-900 dark:text-white mb-4 px-2 sm:px-0">Related Videos</h3>
+                <div class="space-y-2 sm:space-y-3">
                     @foreach($relatedVideos as $related)
-                        <a href="{{ route('video.watch', $related->slug) }}" class="flex gap-2 group">
-                            <div class="relative w-40 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                        <a href="{{ route('video.watch', $related->slug) }}" class="flex gap-2 group px-2 sm:px-0">
+                            <div class="relative w-32 sm:w-40 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                                 @if($related->has_thumbnail)
                                     <img src="{{ $related->thumbnail_url }}" alt="{{ $related->title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
                                 @else
                                     <div class="w-full h-full flex items-center justify-center">
-                                        <svg class="w-8 h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                         </svg>
                                     </div>
                                 @endif
                                 @if($related->duration)
-                                    <div class="absolute bottom-1 right-1 px-1 py-0.5 bg-black/80 text-white rounded text-xs font-medium">
+                                    <div class="absolute bottom-1 right-1 px-1 py-0.5 bg-black/80 text-white rounded text-[10px] sm:text-xs font-medium">
                                         {{ $related->formatted_duration }}
                                     </div>
                                 @endif
                             </div>
                             <div class="flex-1 min-w-0">
-                                <h4 class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{{ $related->title }}</h4>
-                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">{{ $related->user->name }}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-500">{{ number_format($related->views_count ?? 0) }} views • {{ $related->created_at->diffForHumans() }}</p>
+                                <h4 class="text-xs sm:text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors">{{ $related->title }}</h4>
+                                <p class="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1">{{ $related->user->name }}</p>
+                                <p class="text-[10px] sm:text-xs text-gray-500 dark:text-gray-500">{{ number_format($related->views_count ?? 0) }} views • {{ $related->created_at->diffForHumans() }}</p>
                             </div>
                         </a>
                     @endforeach
@@ -319,6 +329,8 @@
     </div>
 
     @push('scripts')
+    {{-- Include HLS.js for HLS playback --}}
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     <script>
         function videoPage() {
             return {
@@ -340,9 +352,18 @@
                 commentError: '',
                 commentsCount: {{ $video->comments_count ?? 0 }},
                 
+                // HLS state
+                hlsPlayer: null,
+                hlsReady: false,
+                hlsUrl: null,
+                mp4Url: '{{ $video->stream_url }}',
+                isUsingHls: false,
+                hlsPollInterval: null,
+                
                 init() {
                     this.initVideoPlayer();
                     this.initViewTracking();
+                    this.initHlsPolling();
                 },
                 
                 initVideoPlayer() {
@@ -356,6 +377,112 @@
                     video.addEventListener('error', (e) => {
                         console.error('Video error:', e);
                     });
+                },
+                
+                // Poll for HLS availability and seamlessly upgrade from MP4
+                async initHlsPolling() {
+                    // Check if HLS is already ready
+                    const status = await this.checkPlaybackStatus();
+                    if (status && status.hls_ready && status.hls_url) {
+                        this.hlsReady = true;
+                        this.hlsUrl = status.hls_url;
+                        this.upgradeToHls();
+                        return;
+                    }
+                    
+                    // If HLS processing is in progress, poll for completion
+                    if (status && status.hls_enabled && status.processing_state !== 'ready') {
+                        this.hlsPollInterval = setInterval(async () => {
+                            const newStatus = await this.checkPlaybackStatus();
+                            if (newStatus && newStatus.hls_ready && newStatus.hls_url) {
+                                clearInterval(this.hlsPollInterval);
+                                this.hlsReady = true;
+                                this.hlsUrl = newStatus.hls_url;
+                                this.upgradeToHls();
+                            }
+                        }, 5000); // Poll every 5 seconds
+                    }
+                },
+                
+                async checkPlaybackStatus() {
+                    try {
+                        const response = await fetch('/api/v1/videos/{{ $video->id }}/playback-status');
+                        return await response.json();
+                    } catch (e) {
+                        console.log('Failed to check playback status:', e);
+                        return null;
+                    }
+                },
+                
+                upgradeToHls() {
+                    if (this.isUsingHls || !this.hlsUrl) return;
+                    
+                    const video = document.getElementById('video-player');
+                    if (!video) return;
+                    
+                    // Store current playback position and state
+                    const wasPlaying = !video.paused;
+                    const currentTime = video.currentTime;
+                    const currentVolume = video.volume;
+                    const wasMuted = video.muted;
+                    
+                    // Check if HLS.js is supported
+                    if (Hls.isSupported()) {
+                        // Destroy existing HLS instance if any
+                        if (this.hlsPlayer) {
+                            this.hlsPlayer.destroy();
+                        }
+                        
+                        this.hlsPlayer = new Hls({
+                            enableWorker: true,
+                            lowLatencyMode: false,
+                            maxBufferLength: 30,
+                            maxMaxBufferLength: 60,
+                            startLevel: -1, // Auto quality selection
+                        });
+                        
+                        this.hlsPlayer.loadSource(this.hlsUrl);
+                        this.hlsPlayer.attachMedia(video);
+                        
+                        this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                            console.log('HLS manifest loaded, switching to adaptive streaming');
+                            this.isUsingHls = true;
+                            
+                            // Restore playback state
+                            video.currentTime = currentTime;
+                            video.volume = currentVolume;
+                            video.muted = wasMuted;
+                            
+                            if (wasPlaying) {
+                                video.play().catch(() => {});
+                            }
+                        });
+                        
+                        this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
+                            console.warn('HLS error:', data.type, data.details);
+                            if (data.fatal) {
+                                // Fall back to MP4 on fatal HLS error
+                                console.log('HLS fatal error, falling back to MP4');
+                                this.hlsPlayer.destroy();
+                                this.hlsPlayer = null;
+                                this.isUsingHls = false;
+                                video.src = this.mp4Url;
+                                video.currentTime = currentTime;
+                                if (wasPlaying) video.play().catch(() => {});
+                            }
+                        });
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        // Native HLS support (Safari)
+                        video.src = this.hlsUrl;
+                        video.currentTime = currentTime;
+                        video.volume = currentVolume;
+                        video.muted = wasMuted;
+                        this.isUsingHls = true;
+                        
+                        video.addEventListener('loadedmetadata', () => {
+                            if (wasPlaying) video.play().catch(() => {});
+                        }, { once: true });
+                    }
                 },
                 
                 initViewTracking() {

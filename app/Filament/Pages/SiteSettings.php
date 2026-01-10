@@ -28,6 +28,10 @@ class SiteSettings extends Page
             'max_upload_size' => Setting::get('max_upload_size', 2048),
             'allow_registration' => Setting::get('allow_registration', true),
             'require_email_verification' => Setting::get('require_email_verification', false),
+            // HLS Settings
+            'enable_hls_processing' => Setting::get('enable_hls_processing', true),
+            'auto_generate_hls' => Setting::get('auto_generate_hls', true),
+            'hls_default_enabled' => Setting::get('hls_default_enabled', true),
         ]);
     }
 
@@ -63,6 +67,20 @@ class SiteSettings extends Page
                             ->label('Allow User Registration'),
                         Forms\Components\Toggle::make('require_email_verification')
                             ->label('Require Email Verification'),
+                    ]),
+
+                Forms\Components\Section::make('HLS (Adaptive Streaming) Settings')
+                    ->description('Configure HLS transcoding for adaptive bitrate streaming. HLS provides better playback experience by adapting video quality to viewer bandwidth.')
+                    ->schema([
+                        Forms\Components\Toggle::make('enable_hls_processing')
+                            ->label('Enable HLS Processing')
+                            ->helperText('Master switch to enable/disable HLS transcoding system-wide. When disabled, videos will only be served as MP4.'),
+                        Forms\Components\Toggle::make('auto_generate_hls')
+                            ->label('Auto-generate HLS for New Uploads')
+                            ->helperText('When enabled, HLS transcoding will automatically start after video upload is complete.'),
+                        Forms\Components\Toggle::make('hls_default_enabled')
+                            ->label('Enable HLS by Default for New Videos')
+                            ->helperText('Sets the default value of the "HLS Enabled" flag when creating new videos.'),
                     ]),
             ])
             ->statePath('data');

@@ -166,4 +166,48 @@ class VideoApiController extends Controller
             'dislikes_count' => $comment->fresh()->dislikes_count,
         ]);
     }
+
+    /**
+     * Get playback status for a video (HLS availability, processing state)
+     * This endpoint is used by the frontend to poll for HLS readiness
+     */
+    public function playbackStatus(Video $video)
+    {
+        // Check if video can be viewed
+        if (!$video->canBeViewedBy(auth()->user())) {
+            return response()->json(['error' => 'Video not found'], 404);
+        }
+
+        return response()->json([
+            'uuid' => $video->uuid,
+            'hls_ready' => $video->is_hls_ready,
+            'hls_url' => $video->is_hls_ready ? $video->hls_url : null,
+            'mp4_url' => route('video.stream', $video->uuid),
+            'processing_state' => $video->processing_state ?? 'pending',
+            'processing_progress' => $video->processing_progress ?? 0,
+            'hls_enabled' => $video->hls_enabled,
+            'duration_seconds' => $video->duration_seconds,
+        ]);
+    }
+
+    /**
+     * Get related videos for a video
+     */
+    public function related(Request $request, Video $video)
+    {
+        $related = Video::published()
+            ->where('id', '!=', $video->id)
+            ->where('is_short', $video->is_short)
+            ->when($video->category_id, function ($query) use ($video) {
+                $query->where('category_id', $video->category_id);
+            })
+            ->with(['user:id,name,username,avatar_path'])
+            ->latest('published_at')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'data' => $related,
+        ]);
+    }
 }

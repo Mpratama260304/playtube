@@ -21,6 +21,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/videos', [VideoApiController::class, 'index']);
     Route::get('/videos/{video}', [VideoApiController::class, 'show']);
     Route::get('/videos/{video}/related', [VideoApiController::class, 'related']);
+    Route::get('/videos/{video}/playback-status', [VideoApiController::class, 'playbackStatus']);
     
     // Search
     Route::get('/search', [SearchApiController::class, 'search']);
