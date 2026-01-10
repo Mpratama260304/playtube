@@ -208,33 +208,34 @@ class Video extends Model
     }
 
     /**
-     * Check if video has a valid thumbnail file on disk.
+     * Check if video has a thumbnail path set (doesn't check file existence for performance).
+     * Use this for display logic - the thumbnail_url will handle missing files gracefully.
      */
     public function getHasThumbnailAttribute(): bool
     {
         $path = $this->normalized_thumbnail_path;
-        return $path && Storage::disk('public')->exists($path);
+        return $path !== null && $path !== '';
     }
 
     /**
      * Get the thumbnail URL using relative path for proper production support.
-     * Returns null if no thumbnail exists (for proper fallback handling in views).
-     * Always uses relative paths to work with reverse proxies and HTTPS.
+     * Returns the path directly without checking file existence for performance.
+     * Browser will show broken image if file doesn't exist (rare case).
      */
     public function getThumbnailUrlAttribute(): ?string
     {
         $path = $this->normalized_thumbnail_path;
         
+        if (!$path) {
+            return null;
+        }
+        
         // Check if it's an external URL
-        if ($path && (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//'))) {
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//')) {
             return $path;
         }
 
-        if ($path && Storage::disk('public')->exists($path)) {
-            return '/storage/' . $path;
-        }
-        
-        return null;
+        return '/storage/' . $path;
     }
 
     /**

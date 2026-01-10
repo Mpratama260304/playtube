@@ -72,17 +72,16 @@
                             class="w-full h-full"
                             controls
                             playsinline
-                            preload="auto"
+                            preload="metadata"
                             poster="{{ $video->thumbnail_url }}"
                             data-video-id="{{ $video->id }}"
                             data-stream-url="{{ route('video.stream', $video) }}"
                             controlslist="nodownload"
                             oncontextmenu="return false;"
-                            x-on:loadedmetadata="onVideoLoaded"
-                            x-on:canplay="onCanPlay"
-                            x-on:waiting="onBuffering"
-                            x-on:playing="onPlaying"
-                            x-on:error="onError"
+                            x-on:canplay="videoReady = true"
+                            x-on:waiting="isBuffering = true"
+                            x-on:playing="isBuffering = false; hasPlayed = true"
+                            x-on:error="videoReady = true; loadingText = 'Error'"
                             x-ref="videoPlayer"
                         >
                             <source src="{{ route('video.stream', $video) }}" type="video/mp4">
@@ -425,8 +424,6 @@
                                         src="{{ $related->thumbnail_url }}" 
                                         alt="{{ $related->title }}" 
                                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                        loading="lazy"
-                                        decoding="async"
                                     >
                                 @else
                                     <div class="w-full h-full flex items-center justify-center">
@@ -484,132 +481,45 @@
                 // Quality selector state
                 showQualityMenu: false,
                 selectedQuality: 'auto',
-                currentAutoQuality: null, // Will be set in initQualitySelector
+                currentAutoQuality: null,
                 currentVideoSrc: '',
                 availableQualities: @json($video->available_qualities ?? []),
-                bufferingCount: 0,
-                lastBufferTime: null,
                 initialLoad: true,
-                warmupController: null, // For aborting warmup fetch on navigation
-                isNavigatingAway: false,
                 
                 init() {
-                    // Ensure video source is set correctly on page load
-                    this.ensureVideoSource();
-                    this.initQualitySelector();
-                    this.initVideoPlayer();
-                    this.initViewTracking();
-                    this.initNavigationCleanup();
+                    // Simple initialization - video source is already in HTML
+                    const video = document.getElementById('video-player');
+                    if (video) {
+                        this.currentVideoSrc = video.dataset.streamUrl;
+                        this.initQualitySelector();
+                        this.initViewTracking();
+                        this.initNavigationCleanup();
+                    }
                     
-                    // After init, subsequent quality changes should reload video
                     this.$nextTick(() => {
                         this.initialLoad = false;
                     });
                 },
                 
-                // Ensure video has source - fixes mobile issue
-                ensureVideoSource() {
+                // Cleanup video when navigating away
+                initNavigationCleanup() {
                     const video = document.getElementById('video-player');
                     if (!video) return;
                     
-                    const streamUrl = video.dataset.streamUrl;
-                    
-                    // Check if video already has a valid source
-                    if (video.currentSrc && video.currentSrc !== '') {
-                        this.currentVideoSrc = video.currentSrc;
-                        return;
-                    }
-                    
-                    // If no src, set it from data attribute or source element
-                    if (streamUrl) {
-                        const source = video.querySelector('source');
-                        if (!source || !source.src) {
-                            video.src = streamUrl;
-                        }
-                        this.currentVideoSrc = streamUrl;
-                        video.load();
-                    }
-                },
-                
-                // Cleanup video when navigating away to speed up page transitions
-                initNavigationCleanup() {
-                    const video = document.getElementById('video-player');
-                    const self = this;
-                    
-                    // Smart cleanup function - stops video download efficiently
-                    const cleanupVideo = () => {
-                        if (self.isNavigatingAway) return; // Prevent double cleanup
-                        self.isNavigatingAway = true;
-                        
-                        // Abort any ongoing warmup fetch
-                        self.abortWarmup();
-                        
-                        if (video) {
-                            try {
-                                video.pause();
-                                // Set src to empty blob to immediately abort download
-                                video.src = 'about:blank';
-                                video.load();
-                            } catch(e) {
-                                // Ignore errors during cleanup
-                            }
+                    // Simple cleanup - just pause video before navigation
+                    const cleanup = () => {
+                        if (video && !video.paused) {
+                            video.pause();
                         }
                     };
                     
-                    // Stop video before navigating to another page
-                    window.addEventListener('beforeunload', cleanupVideo);
-                    window.addEventListener('pagehide', cleanupVideo);
-                    
-                    // Handle visibility change (tab switch)
-                    document.addEventListener('visibilitychange', () => {
-                        if (document.hidden && video && !video.paused) {
-                            video.pause();
-                        }
-                    });
-                    
-                    // Handle click on links with cleanup
-                    document.addEventListener('click', (e) => {
-                        const link = e.target.closest('a[href]');
-                        if (link && !link.hasAttribute('target')) {
-                            const href = link.getAttribute('href');
-                            if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-                                // Cleanup video to free up connection
-                                cleanupVideo();
-                                
-                                // Show loading state on clicked video cards
-                                if (href.includes('/watch/')) {
-                                    const card = link.closest('.group');
-                                    if (card) {
-                                        const thumb = card.querySelector('.aspect-video');
-                                        if (thumb && !thumb.querySelector('.nav-loading')) {
-                                            const overlay = document.createElement('div');
-                                            overlay.className = 'nav-loading absolute inset-0 bg-black/50 flex items-center justify-center z-10';
-                                            overlay.innerHTML = '<div class="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>';
-                                            thumb.appendChild(overlay);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }, { capture: true });
-                    
-                    // Also handle keyboard navigation (Enter on links)
-                    document.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
-                            const link = document.activeElement?.closest('a[href]');
-                            if (link && !link.hasAttribute('target')) {
-                                cleanupVideo();
-                            }
-                        }
-                    }, { capture: true });
+                    window.addEventListener('beforeunload', cleanup);
+                    window.addEventListener('pagehide', cleanup);
                 },
                 
                 initQualitySelector() {
                     // Load saved quality preference
                     const saved = localStorage.getItem('playtube_quality');
-                    
-                    // Detect mobile
-                    const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
                     
                     // Determine default quality based on device
                     const defaultQuality = this.getDefaultQuality();
@@ -617,33 +527,15 @@
                     this.selectedQuality = saved || 'auto';
                     this.currentAutoQuality = defaultQuality;
                     
-                    // Build initial source URL
-                    let initialQuality = this.selectedQuality === 'auto' ? defaultQuality : this.selectedQuality;
-                    
                     // Check if selected quality exists, fallback to default
+                    let initialQuality = this.selectedQuality === 'auto' ? defaultQuality : this.selectedQuality;
                     if (this.selectedQuality !== 'auto' && !this.availableQualities[this.selectedQuality]) {
                         initialQuality = defaultQuality;
                         this.selectedQuality = 'auto';
                     }
                     
-                    this.currentVideoSrc = this.getQualityUrl(initialQuality);
-                    
-                    // Update video source only if we have renditions and different quality
-                    const video = document.getElementById('video-player');
-                    if (video) {
-                        const currentSrc = video.currentSrc || video.src;
-                        // Only change src if we have specific renditions AND the URL is different
-                        if (Object.keys(this.availableQualities).length > 0 && 
-                            this.currentVideoSrc && 
-                            currentSrc && 
-                            !currentSrc.includes('about:blank') &&
-                            this.currentVideoSrc !== currentSrc) {
-                            video.src = this.currentVideoSrc;
-                        } else if (currentSrc && !currentSrc.includes('about:blank')) {
-                            // Use existing src from HTML
-                            this.currentVideoSrc = currentSrc;
-                        }
-                    }
+                    // Don't change video source on init - let HTML source element handle it
+                    // Quality selector only works when user manually changes quality
                 },
                 
                 getDefaultQuality() {
@@ -767,115 +659,11 @@
                     if (this.hasPlayed) {
                         this.isBuffering = true;
                     }
-                    
-                    const now = Date.now();
-                    
-                    // Track buffering events
-                    if (!this.lastBufferTime || (now - this.lastBufferTime) > 3000) {
-                        this.bufferingCount++;
-                        this.lastBufferTime = now;
-                        
-                        // Auto-downshift if too many stalls in Auto mode
-                        if (this.selectedQuality === 'auto' && this.bufferingCount >= 3) {
-                            this.autoDownshift();
-                        }
-                    }
-                },
-                
-                autoDownshift() {
-                    const qualityLadder = ['1080', '720', '480', '360'];
-                    const currentIdx = qualityLadder.indexOf(this.currentAutoQuality);
-                    
-                    if (currentIdx < qualityLadder.length - 1) {
-                        const nextQuality = qualityLadder[currentIdx + 1];
-                        
-                        if (this.availableQualities[nextQuality]) {
-                            console.log(`Auto-downshifting from ${this.currentAutoQuality}p to ${nextQuality}p due to buffering`);
-                            this.setAutoQuality(nextQuality);
-                            this.bufferingCount = 0;
-                        }
-                    }
                 },
                 
                 onPlaying() {
                     this.hasPlayed = true;
                     this.isBuffering = false;
-                    
-                    // Reset buffering count on successful playback
-                    if (this.bufferingCount > 0) {
-                        setTimeout(() => {
-                            this.bufferingCount = 0;
-                        }, 10000);
-                    }
-                },
-                
-                onVideoLoaded() {
-                    const video = document.getElementById('video-player');
-                    if (video) {
-                        console.log('Video metadata loaded: duration =', video.duration);
-                    }
-                },
-                
-                onCanPlay() {
-                    // Video has enough data to start playing
-                    this.videoReady = true;
-                    this.loadingText = 'Ready';
-                },
-                
-                onError(e) {
-                    console.error('Video error:', e);
-                    this.videoReady = true; // Hide loading to show error
-                    this.loadingText = 'Error loading video';
-                },
-                
-                // Warmup cache by fetching first bytes
-                async warmupVideoCache() {
-                    if (!this.currentVideoSrc) return;
-                    
-                    try {
-                        // Store controller globally so it can be aborted on navigation
-                        this.warmupController = new AbortController();
-                        const timeoutId = setTimeout(() => this.warmupController?.abort(), 5000);
-                        
-                        await fetch(this.currentVideoSrc, {
-                            method: 'GET',
-                            headers: { 'Range': 'bytes=0-262143' }, // Only 256KB warmup
-                            signal: this.warmupController.signal,
-                            credentials: 'same-origin'
-                        });
-                        
-                        clearTimeout(timeoutId);
-                    } catch (e) {
-                        // Ignore errors - this is just a warmup
-                    }
-                    this.warmupController = null;
-                },
-                
-                // Abort any ongoing warmup fetch
-                abortWarmup() {
-                    if (this.warmupController) {
-                        this.warmupController.abort();
-                        this.warmupController = null;
-                    }
-                },
-                
-                initVideoPlayer() {
-                    const video = document.getElementById('video-player');
-                    if (!video) return;
-                    
-                    // Handle video errors
-                    video.addEventListener('error', (e) => {
-                        console.error('Video error:', e);
-                        const error = video.error;
-                        if (error) {
-                            console.error('MediaError code:', error.code, 'message:', error.message);
-                        }
-                    });
-                    
-                    // Handle stalled/waiting states
-                    video.addEventListener('stalled', () => {
-                        console.warn('Video stalled - network issue');
-                    });
                 },
                 
                 initViewTracking() {
