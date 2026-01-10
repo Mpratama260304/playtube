@@ -72,9 +72,10 @@
                             class="w-full h-full"
                             controls
                             playsinline
-                            preload="metadata"
+                            preload="auto"
                             poster="{{ $video->thumbnail_url }}"
                             data-video-id="{{ $video->id }}"
+                            data-stream-url="{{ route('video.stream', $video) }}"
                             controlslist="nodownload"
                             oncontextmenu="return false;"
                             x-on:loadedmetadata="onVideoLoaded"
@@ -83,8 +84,8 @@
                             x-on:playing="onPlaying"
                             x-on:error="onError"
                             x-ref="videoPlayer"
-                            src="{{ route('video.stream', $video) }}"
                         >
+                            <source src="{{ route('video.stream', $video) }}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
 
@@ -490,12 +491,14 @@
                 lastBufferTime: null,
                 initialLoad: true,
                 warmupController: null, // For aborting warmup fetch on navigation
+                isNavigatingAway: false,
                 
                 init() {
+                    // Ensure video source is set correctly on page load
+                    this.ensureVideoSource();
                     this.initQualitySelector();
                     this.initVideoPlayer();
                     this.initViewTracking();
-                    this.warmupVideoCache();
                     this.initNavigationCleanup();
                     
                     // After init, subsequent quality changes should reload video
@@ -504,50 +507,76 @@
                     });
                 },
                 
+                // Ensure video has source - fixes mobile issue
+                ensureVideoSource() {
+                    const video = document.getElementById('video-player');
+                    if (!video) return;
+                    
+                    const streamUrl = video.dataset.streamUrl;
+                    
+                    // Check if video already has a valid source
+                    if (video.currentSrc && video.currentSrc !== '') {
+                        this.currentVideoSrc = video.currentSrc;
+                        return;
+                    }
+                    
+                    // If no src, set it from data attribute or source element
+                    if (streamUrl) {
+                        const source = video.querySelector('source');
+                        if (!source || !source.src) {
+                            video.src = streamUrl;
+                        }
+                        this.currentVideoSrc = streamUrl;
+                        video.load();
+                    }
+                },
+                
                 // Cleanup video when navigating away to speed up page transitions
                 initNavigationCleanup() {
                     const video = document.getElementById('video-player');
                     const self = this;
                     
-                    // Aggressive cleanup function - completely stops video download
+                    // Smart cleanup function - stops video download efficiently
                     const cleanupVideo = () => {
+                        if (self.isNavigatingAway) return; // Prevent double cleanup
+                        self.isNavigatingAway = true;
+                        
                         // Abort any ongoing warmup fetch
                         self.abortWarmup();
                         
                         if (video) {
-                            video.pause();
-                            // Remove src attribute completely to abort any ongoing download
-                            video.removeAttribute('src');
-                            // Remove all source children
-                            while (video.firstChild) {
-                                video.removeChild(video.firstChild);
+                            try {
+                                video.pause();
+                                // Set src to empty blob to immediately abort download
+                                video.src = 'about:blank';
+                                video.load();
+                            } catch(e) {
+                                // Ignore errors during cleanup
                             }
-                            // Force browser to release the connection
-                            video.load();
                         }
                     };
                     
                     // Stop video before navigating to another page
                     window.addEventListener('beforeunload', cleanupVideo);
+                    window.addEventListener('pagehide', cleanupVideo);
                     
                     // Handle visibility change (tab switch)
                     document.addEventListener('visibilitychange', () => {
                         if (document.hidden && video && !video.paused) {
-                            // Just pause, don't cleanup - user might come back
                             video.pause();
                         }
                     });
                     
-                    // CRITICAL: Handle click on links with IMMEDIATE cleanup
+                    // Handle click on links with cleanup
                     document.addEventListener('click', (e) => {
                         const link = e.target.closest('a[href]');
                         if (link && !link.hasAttribute('target')) {
                             const href = link.getAttribute('href');
                             if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-                                // IMMEDIATELY cleanup video to free up connection
+                                // Cleanup video to free up connection
                                 cleanupVideo();
                                 
-                                // Show loading state on clicked element
+                                // Show loading state on clicked video cards
                                 if (href.includes('/watch/')) {
                                     const card = link.closest('.group');
                                     if (card) {
@@ -599,17 +628,21 @@
                     
                     this.currentVideoSrc = this.getQualityUrl(initialQuality);
                     
-                    // Only update video source if it's different from default or if quality renditions available
+                    // Update video source only if we have renditions and different quality
                     const video = document.getElementById('video-player');
                     if (video) {
-                        // Only change src if we have specific renditions, otherwise use default from HTML
-                        if (Object.keys(this.availableQualities).length > 0 && this.currentVideoSrc !== video.src) {
+                        const currentSrc = video.currentSrc || video.src;
+                        // Only change src if we have specific renditions AND the URL is different
+                        if (Object.keys(this.availableQualities).length > 0 && 
+                            this.currentVideoSrc && 
+                            currentSrc && 
+                            !currentSrc.includes('about:blank') &&
+                            this.currentVideoSrc !== currentSrc) {
                             video.src = this.currentVideoSrc;
-                        } else {
+                        } else if (currentSrc && !currentSrc.includes('about:blank')) {
                             // Use existing src from HTML
-                            this.currentVideoSrc = video.src;
+                            this.currentVideoSrc = currentSrc;
                         }
-                        this.loadingText = isMobile ? 'Loading...' : 'Loading...';
                     }
                 },
                 
