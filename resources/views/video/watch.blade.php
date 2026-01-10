@@ -16,7 +16,7 @@
     @endsection
 
     {{-- Mobile-first layout with proper overflow handling --}}
-    <div class="w-full max-w-[1800px] mx-auto px-0 sm:px-4 lg:px-6" x-data="videoPage()" x-init="init()">
+    <div class="w-full max-w-[1800px] mx-auto px-0 sm:px-4 lg:px-6" x-data="window.videoPage()" x-init="init()">
         <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] gap-3 lg:gap-6">
             <!-- Main Content -->
             <div class="min-w-0">
@@ -451,9 +451,10 @@
         </div>
     </div>
 
-    @push('scripts')
+    @push('styles')
     <script>
-        function videoPage() {
+        // Define videoPage before Alpine.js starts
+        window.videoPage = function() {
             return {
                 userReaction: @json($userReaction?->reaction ?? null),
                 likesCount: {{ $video->likes_count ?? 0 }},
