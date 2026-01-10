@@ -148,51 +148,74 @@ php -m | grep intl
 
 GitHub Codespaces requires special configuration for Vite dev server because assets must be served over HTTPS through the forwarded port.
 
-### Quick Start
+### Option 1: Production Build (Recommended - No CORS issues)
 
-1. **Update `.env` with your Codespace name:**
-   ```bash
-   # Find your Codespace name (e.g., "urban-space-xyzabc")
-   echo $CODESPACE_NAME
-   
-   # Update .env
-   APP_URL=https://${CODESPACE_NAME}-8000.app.github.dev
-   ```
+The simplest approach - build assets once and serve them through Laravel:
 
-2. **Start Laravel server:**
+```bash
+# Remove hot file to disable Vite dev server detection
+rm -f public/hot
+
+# Install dependencies and build production assets
+npm install
+npm run build
+
+# Start Laravel server
+php artisan serve --host 0.0.0.0 --port 8000
+```
+
+Open `https://<CODESPACE_NAME>-8000.app.github.dev` - fully styled, no CORS errors.
+
+### Option 2: Vite Dev Server (For active development with HMR)
+
+1. **Start Laravel server (Terminal 1):**
    ```bash
    php artisan serve --host 0.0.0.0 --port 8000
    ```
 
-3. **Start Vite dev server (in another terminal):**
+2. **Start Vite dev server (Terminal 2):**
    ```bash
-   npm run dev:codespaces
+   npm run dev
    ```
 
-4. **Forward ports in Codespaces:**
-   - Open the "Ports" tab in VS Code
-   - Ensure port `8000` (Laravel) and `5173` (Vite) are forwarded
-   - Set port `5173` visibility to **Public** (required for assets to load)
+3. **IMPORTANT: Set port 5173 to Public visibility:**
+   - Open the **Ports** tab in VS Code
+   - Find port `5173` 
+   - Right-click → Change Port Visibility → **Public**
+   - Without this, CORS will block asset loading!
 
-5. **Access the app:**
-   - Open `https://<CODESPACE_NAME>-8000.app.github.dev` in your browser
+4. **Access the app:**
+   - Open `https://<CODESPACE_NAME>-8000.app.github.dev`
 
 ### Troubleshooting Codespaces
 
 | Issue | Solution |
 |-------|----------|
-| Mixed Content errors | Ensure port 5173 is set to **Public** visibility |
-| Assets not loading | Restart `npm run dev:codespaces` after port forwarding |
-| HMR not working | Check that WSS connection to port 5173 is allowed |
-| `net::ERR_ADDRESS_INVALID` | Vite config auto-detects Codespaces; ensure `CODESPACE_NAME` env var exists |
+| CORS errors / assets not loading | Set port 5173 visibility to **Public** |
+| MIME type errors for CSS/JS | Restart Vite: `npm run dev` |
+| Stale hot file | `rm -f public/hot && npm run dev` |
+| HMR not connecting | Verify WSS to 5173 is allowed (Public visibility) |
+| Mixed Content warnings | Both ports must use HTTPS (automatic in Codespaces) |
 
-### How it works
+### How it Works
 
 The `vite.config.js` automatically detects Codespaces via `process.env.CODESPACE_NAME` and configures:
-- `server.origin` → HTTPS URL for asset requests
-- `server.hmr.protocol` → `wss` for secure WebSocket
-- `server.hmr.host` → Codespaces forwarded domain
-- `server.hmr.clientPort` → `443` (HTTPS default)
+
+- `cors: { origin: true }` + explicit headers → Allows cross-origin requests
+- `origin: https://<CODESPACE>-5173.app.github.dev` → Correct asset URLs  
+- `hmr.protocol: 'wss'` → Secure WebSocket for Hot Module Replacement
+- `hmr.clientPort: 443` → Routes through Codespaces HTTPS proxy
+- `allowedHosts: ['.app.github.dev']` → Accepts Codespaces proxy hosts
+
+### Environment Variables
+
+**In `.env` (for Codespaces):**
+```bash
+APP_URL=https://<CODESPACE_NAME>-8000.app.github.dev
+ASSET_URL=https://<CODESPACE_NAME>-8000.app.github.dev
+```
+
+⚠️ **WARNING:** Never set `ASSET_URL` to the 5173 port! This causes MIME type and CORS errors. The Vite dev server URL is handled automatically by `vite.config.js`.
 
 ## Default Credentials
 
