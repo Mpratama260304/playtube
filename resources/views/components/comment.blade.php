@@ -1,6 +1,6 @@
 @props(['comment', 'level' => 0])
 
-<div class="flex gap-3 {{ $level > 0 ? 'ml-12' : '' }}" x-data="commentReaction({{ $comment->id }}, {{ $comment->likes_count ?? 0 }}, {{ $comment->dislikes_count ?? 0 }})">
+<div class="flex gap-3 {{ $level > 0 ? 'ml-12' : '' }}" x-data="window.commentReaction({{ $comment->id }}, {{ $comment->likes_count ?? 0 }}, {{ $comment->dislikes_count ?? 0 }})">
     <a href="{{ route('channel.show', $comment->user->username) }}" class="flex-shrink-0">
         @if($comment->user->avatar)
             <img src="{{ $comment->user->avatar_url }}" alt="{{ $comment->user->name }}" class="w-10 h-10 rounded-full object-cover">
@@ -89,9 +89,9 @@
 </div>
 
 @once
-@push('scripts')
+@push('styles')
 <script>
-    function commentReaction(commentId, initialLikes, initialDislikes) {
+    window.commentReaction = function(commentId, initialLikes, initialDislikes) {
         return {
             commentId: commentId,
             likesCount: initialLikes,
