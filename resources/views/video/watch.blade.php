@@ -489,6 +489,7 @@
                 bufferingCount: 0,
                 lastBufferTime: null,
                 initialLoad: true,
+                warmupController: null, // For aborting warmup fetch on navigation
                 
                 init() {
                     this.initQualitySelector();
@@ -506,38 +507,69 @@
                 // Cleanup video when navigating away to speed up page transitions
                 initNavigationCleanup() {
                     const video = document.getElementById('video-player');
+                    const self = this;
                     
-                    // Stop video before navigating to another page
-                    window.addEventListener('beforeunload', () => {
+                    // Aggressive cleanup function - completely stops video download
+                    const cleanupVideo = () => {
+                        // Abort any ongoing warmup fetch
+                        self.abortWarmup();
+                        
                         if (video) {
                             video.pause();
-                            video.src = '';
+                            // Remove src attribute completely to abort any ongoing download
+                            video.removeAttribute('src');
+                            // Remove all source children
+                            while (video.firstChild) {
+                                video.removeChild(video.firstChild);
+                            }
+                            // Force browser to release the connection
                             video.load();
+                        }
+                    };
+                    
+                    // Stop video before navigating to another page
+                    window.addEventListener('beforeunload', cleanupVideo);
+                    
+                    // Handle visibility change (tab switch)
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden && video && !video.paused) {
+                            // Just pause, don't cleanup - user might come back
+                            video.pause();
                         }
                     });
                     
-                    // Also handle click on links to pre-cleanup
+                    // CRITICAL: Handle click on links with IMMEDIATE cleanup
                     document.addEventListener('click', (e) => {
                         const link = e.target.closest('a[href]');
                         if (link && !link.hasAttribute('target')) {
                             const href = link.getAttribute('href');
                             if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
-                                // Pre-cleanup video to speed up navigation
-                                if (video && !video.paused) {
-                                    video.pause();
-                                }
+                                // IMMEDIATELY cleanup video to free up connection
+                                cleanupVideo();
                                 
-                                // Show loading state on related video cards
+                                // Show loading state on clicked element
                                 if (href.includes('/watch/')) {
                                     const card = link.closest('.group');
                                     if (card) {
-                                        // Add loading overlay to the thumbnail
                                         const thumb = card.querySelector('.aspect-video');
-                                        if (thumb) {
-                                            thumb.innerHTML += '<div class="absolute inset-0 bg-black/50 flex items-center justify-center z-10"><div class="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div></div>';
+                                        if (thumb && !thumb.querySelector('.nav-loading')) {
+                                            const overlay = document.createElement('div');
+                                            overlay.className = 'nav-loading absolute inset-0 bg-black/50 flex items-center justify-center z-10';
+                                            overlay.innerHTML = '<div class="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>';
+                                            thumb.appendChild(overlay);
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }, { capture: true });
+                    
+                    // Also handle keyboard navigation (Enter on links)
+                    document.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            const link = document.activeElement?.closest('a[href]');
+                            if (link && !link.hasAttribute('target')) {
+                                cleanupVideo();
                             }
                         }
                     }, { capture: true });
@@ -768,21 +800,29 @@
                     if (!this.currentVideoSrc) return;
                     
                     try {
-                        // Fetch first 512KB to prime cache/CDN
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        // Store controller globally so it can be aborted on navigation
+                        this.warmupController = new AbortController();
+                        const timeoutId = setTimeout(() => this.warmupController?.abort(), 5000);
                         
                         await fetch(this.currentVideoSrc, {
                             method: 'GET',
-                            headers: { 'Range': 'bytes=0-524287' },
-                            signal: controller.signal,
+                            headers: { 'Range': 'bytes=0-262143' }, // Only 256KB warmup
+                            signal: this.warmupController.signal,
                             credentials: 'same-origin'
                         });
                         
                         clearTimeout(timeoutId);
                     } catch (e) {
                         // Ignore errors - this is just a warmup
-                        console.log('Cache warmup skipped:', e.message);
+                    }
+                    this.warmupController = null;
+                },
+                
+                // Abort any ongoing warmup fetch
+                abortWarmup() {
+                    if (this.warmupController) {
+                        this.warmupController.abort();
+                        this.warmupController = null;
                     }
                 },
                 
