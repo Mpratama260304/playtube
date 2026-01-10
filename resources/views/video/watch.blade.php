@@ -15,11 +15,11 @@
     <meta name="twitter:image" content="{{ $video->thumbnail_url ? url($video->thumbnail_url) : url('/images/placeholder-thumb.svg') }}">
     @endsection
 
-    {{-- Minimal padding on mobile for theater-like experience --}}
-    <div class="max-w-[1800px] mx-auto px-0 sm:px-4 lg:px-6" x-data="videoPage()" x-init="init()">
-        <div class="flex flex-col lg:flex-row gap-3 lg:gap-6">
+    {{-- Mobile-first layout with proper overflow handling --}}
+    <div class="w-full max-w-[1800px] mx-auto px-0 sm:px-4 lg:px-6" x-data="videoPage()" x-init="init()">
+        <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px] gap-3 lg:gap-6">
             <!-- Main Content -->
-            <div class="flex-1 min-w-0">
+            <div class="min-w-0">
                 {{-- Processing Banner --}}
                 @if(($isOwner || $isAdmin) && $video->processing_state === 'pending')
                 <div class="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-3 mx-2 sm:mx-0">
@@ -387,12 +387,12 @@
             </div>
 
             <!-- Sidebar - Related Videos -->
-            <div class="w-full lg:w-[360px] xl:w-[400px] flex-shrink-0 px-2 sm:px-0">
-                <h3 class="text-sm sm:text-base font-bold text-gray-900 dark:text-white mb-3">Related Videos</h3>
+            <div class="min-w-0 px-2 sm:px-0">
+                <h3 class="text-sm sm:text-base font-bold text-gray-900 dark:text-white mb-3 px-1 sm:px-0">Related Videos</h3>
                 <div class="space-y-2">
                     @foreach($relatedVideos as $related)
                         <a href="{{ route('video.watch', $related->slug) }}" class="flex gap-2 group hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg p-1 -mx-1 transition-colors">
-                            <div class="relative w-40 sm:w-44 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
+                            <div class="relative w-36 sm:w-40 lg:w-44 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                                 @if($related->has_thumbnail)
                                     <img 
                                         src="{{ $related->thumbnail_url }}" 
@@ -415,7 +415,7 @@
                                 @endif
                             </div>
                             <div class="flex-1 min-w-0 py-0.5">
-                                <h4 class="text-xs sm:text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{{ $related->title }}</h4>
+                                <h4 class="text-xs sm:text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-snug">{{ $related->title }}</h4>
                                 <p class="text-[11px] sm:text-xs text-gray-600 dark:text-gray-400 mt-1 truncate">{{ $related->user->name }}</p>
                                 <p class="text-[11px] sm:text-xs text-gray-500 dark:text-gray-500">{{ number_format($related->views_count ?? 0) }} views • {{ $related->created_at->diffForHumans(null, true) }}</p>
                             </div>

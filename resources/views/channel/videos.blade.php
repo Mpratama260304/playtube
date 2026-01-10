@@ -1,38 +1,38 @@
 <x-main-layout>
     <x-slot name="title">{{ $channel->name }} - Videos - {{ config('app.name') }}</x-slot>
 
-    <!-- Channel Header Mini -->
-    <div class="flex items-center space-x-4 mb-6 p-4 bg-gray-800 rounded-xl">
+    <!-- Channel Header Mini - Responsive -->
+    <div class="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6 p-3 sm:p-4 bg-gray-800 rounded-lg sm:rounded-xl">
         @if($channel->avatar_path)
-            <img src="{{ $channel->avatar_url }}" alt="{{ $channel->name }}" class="w-16 h-16 rounded-full object-cover">
+            <img src="{{ $channel->avatar_url }}" alt="{{ $channel->name }}" class="w-12 h-12 sm:w-16 sm:h-16 rounded-full object-cover flex-shrink-0">
         @else
-            <div class="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white text-2xl font-bold">
+            <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-red-600 flex items-center justify-center text-white text-xl sm:text-2xl font-bold flex-shrink-0">
                 {{ strtoupper(substr($channel->name, 0, 1)) }}
             </div>
         @endif
-        <div class="flex-1">
-            <h1 class="text-xl font-bold text-white">{{ $channel->name }}</h1>
-            <p class="text-gray-400 text-sm">@{{ $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
+        <div class="flex-1 min-w-0">
+            <h1 class="text-base sm:text-xl font-bold text-white truncate">{{ $channel->name }}</h1>
+            <p class="text-gray-400 text-xs sm:text-sm truncate">@{{ $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
         </div>
-        <a href="{{ route('channel.show', $channel->username) }}" class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600">
+        <a href="{{ route('channel.show', $channel->username) }}" class="hidden sm:block px-4 py-2 bg-gray-700 text-white text-sm rounded-lg hover:bg-gray-600 flex-shrink-0">
             View Channel
         </a>
     </div>
 
-    <!-- Tabs -->
-    <div class="border-b border-gray-800 mb-6">
-        <nav class="flex space-x-8">
-            <a href="{{ route('channel.show', $channel->username) }}" class="py-4 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">Home</a>
-            <a href="{{ route('channel.videos', $channel->username) }}" class="py-4 text-sm font-medium border-b-2 border-white text-white">Videos</a>
-            <a href="{{ route('channel.shorts', $channel->username) }}" class="py-4 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">Shorts</a>
-            <a href="{{ route('channel.playlists', $channel->username) }}" class="py-4 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">Playlists</a>
-            <a href="{{ route('channel.about', $channel->username) }}" class="py-4 text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white">About</a>
+    <!-- Tabs - Horizontally scrollable on mobile -->
+    <div class="border-b border-gray-800 mb-4 sm:mb-6 -mx-2 sm:mx-0">
+        <nav class="flex gap-4 sm:gap-8 overflow-x-auto scrollbar-hide px-2 sm:px-0">
+            <a href="{{ route('channel.show', $channel->username) }}" class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white whitespace-nowrap flex-shrink-0">Home</a>
+            <a href="{{ route('channel.videos', $channel->username) }}" class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 border-white text-white whitespace-nowrap flex-shrink-0">Videos</a>
+            <a href="{{ route('channel.shorts', $channel->username) }}" class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white whitespace-nowrap flex-shrink-0">Shorts</a>
+            <a href="{{ route('channel.playlists', $channel->username) }}" class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white whitespace-nowrap flex-shrink-0">Playlists</a>
+            <a href="{{ route('channel.about', $channel->username) }}" class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 border-transparent text-gray-400 hover:text-white whitespace-nowrap flex-shrink-0">About</a>
         </nav>
     </div>
 
-    <!-- Videos Grid -->
+    <!-- Videos Grid - Mobile-first -->
     @if($videos->count() > 0)
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
             @foreach($videos as $video)
                 <div class="group">
                     <a href="{{ route('video.watch', $video) }}" class="block">

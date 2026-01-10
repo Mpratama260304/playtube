@@ -1,10 +1,10 @@
 @props(['video', 'compact' => false])
 
-<!-- Video Card Component -->
+<!-- Video Card Component - Mobile-first responsive -->
 <div class="group">
     <a href="{{ route('video.watch', $video->slug) }}" class="block">
-        <!-- Thumbnail -->
-        <div class="relative aspect-video bg-gray-200 dark:bg-gray-800 rounded-xl overflow-hidden mb-3">
+        <!-- Thumbnail - Full width, aspect-video -->
+        <div class="relative w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg sm:rounded-xl overflow-hidden mb-2 sm:mb-3">
             @if($video->has_thumbnail)
                 <img 
                     src="{{ $video->thumbnail_url }}" 
@@ -15,7 +15,7 @@
                 >
             @else
                 <div class="w-full h-full flex items-center justify-center">
-                    <svg class="w-12 h-12 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
                 </div>
@@ -23,13 +23,13 @@
 
             <!-- Duration Badge -->
             @if($video->duration)
-                <div class="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/80 text-white text-xs font-medium rounded">
+                <div class="absolute bottom-1.5 right-1.5 sm:bottom-2 sm:right-2 px-1 sm:px-1.5 py-0.5 bg-black/80 text-white text-[10px] sm:text-xs font-medium rounded">
                     {{ $video->formatted_duration }}
                 </div>
             @endif
 
-            <!-- Hover Play Icon -->
-            <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
+            <!-- Hover Play Icon - Hidden on touch devices -->
+            <div class="absolute inset-0 hidden sm:flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/20">
                 <div class="w-12 h-12 bg-black/60 rounded-full flex items-center justify-center backdrop-blur-sm">
                     <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M8 5v14l11-7z"/>
@@ -39,19 +39,19 @@
         </div>
     </a>
 
-    <!-- Info -->
-    <div class="flex gap-3">
-        <!-- Channel Avatar -->
+    <!-- Info - Compact on mobile -->
+    <div class="flex gap-2 sm:gap-3">
+        <!-- Channel Avatar - Smaller on mobile -->
         @if(!$compact)
         <a href="{{ route('channel.show', $video->user->username) }}" class="flex-shrink-0">
             @if($video->user->avatar)
                 <img 
                     src="{{ $video->user->avatar_url }}" 
                     alt="{{ $video->user->name }}" 
-                    class="w-9 h-9 rounded-full object-cover"
+                    class="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover"
                 >
             @else
-                <div class="w-9 h-9 rounded-full bg-brand-500 flex items-center justify-center text-white text-sm font-medium">
+                <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-brand-500 flex items-center justify-center text-white text-xs sm:text-sm font-medium">
                     {{ strtoupper(substr($video->user->name, 0, 1)) }}
                 </div>
             @endif
@@ -61,16 +61,16 @@
         <!-- Text Content -->
         <div class="flex-1 min-w-0">
             <a href="{{ route('video.watch', $video->slug) }}" class="block group/title">
-                <h3 class="text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover/title:text-gray-600 dark:group-hover/title:text-gray-300 transition-colors">
+                <h3 class="text-xs sm:text-sm font-medium text-gray-900 dark:text-white line-clamp-2 group-hover/title:text-gray-600 dark:group-hover/title:text-gray-300 transition-colors leading-snug">
                     {{ $video->title }}
                 </h3>
             </a>
             
-            <a href="{{ route('channel.show', $video->user->username) }}" class="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 mt-1 block transition-colors">
+            <a href="{{ route('channel.show', $video->user->username) }}" class="text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-300 mt-0.5 sm:mt-1 block transition-colors truncate">
                 {{ $video->user->name }}
             </a>
             
-            <div class="flex items-center text-xs text-gray-500 dark:text-gray-500 mt-1">
+            <div class="flex items-center flex-wrap text-[11px] sm:text-xs text-gray-500 dark:text-gray-500 mt-0.5 sm:mt-1">
                 <span>{{ number_format($video->views_count ?? $video->views()->count()) }} views</span>
                 <span class="mx-1">•</span>
                 <span>{{ $video->created_at->diffForHumans() }}</span>

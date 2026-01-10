@@ -1,79 +1,80 @@
 <x-main-layout>
     <x-slot name="title">{{ $channel->name }} - {{ config('app.name') }}</x-slot>
 
-    <!-- Channel Banner -->
-    <div class="relative h-32 sm:h-48 bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl overflow-hidden mb-6">
+    <!-- Channel Banner - Shorter on mobile -->
+    <div class="relative h-24 sm:h-32 md:h-48 bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg sm:rounded-xl overflow-hidden mb-4 sm:mb-6 -mx-2 sm:mx-0">
         @if($channel->cover_path)
             <img src="{{ $channel->cover_url }}" alt="{{ $channel->name }}" class="w-full h-full object-cover">
         @endif
     </div>
 
-    <!-- Channel Info -->
-    <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 mb-6">
-        <!-- Avatar -->
+    <!-- Channel Info - Stack on mobile -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6 mb-4 sm:mb-6 px-1 sm:px-0">
+        <!-- Avatar - Smaller on mobile -->
         @if($channel->avatar_path)
-            <img src="{{ $channel->avatar_url }}" alt="{{ $channel->name }}" class="w-20 h-20 sm:w-32 sm:h-32 rounded-full object-cover">
+            <img src="{{ $channel->avatar_url }}" alt="{{ $channel->name }}" class="w-16 h-16 sm:w-20 sm:h-20 md:w-32 md:h-32 rounded-full object-cover flex-shrink-0">
         @else
-            <div class="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-red-600 flex items-center justify-center text-white text-3xl sm:text-5xl font-bold">
+            <div class="w-16 h-16 sm:w-20 sm:h-20 md:w-32 md:h-32 rounded-full bg-red-600 flex items-center justify-center text-white text-2xl sm:text-3xl md:text-5xl font-bold flex-shrink-0">
                 {{ strtoupper(substr($channel->name, 0, 1)) }}
             </div>
         @endif
 
         <!-- Info -->
-        <div class="flex-1">
-            <h1 class="text-2xl sm:text-3xl font-bold text-white">{{ $channel->name }}</h1>
-            <p class="text-gray-400">@{{ $channel->username }}</p>
-            <div class="flex items-center space-x-4 text-sm text-gray-400 mt-2">
+        <div class="flex-1 min-w-0">
+            <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">{{ $channel->name }}</h1>
+            <p class="text-gray-400 text-sm sm:text-base">@{{ $channel->username }}</p>
+            <div class="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2 flex-wrap">
                 <span>{{ number_format($subscribersCount) }} subscribers</span>
+                <span class="hidden sm:inline">•</span>
                 <span>{{ number_format($channel->videos()->count()) }} videos</span>
             </div>
             @if($channel->bio)
-                <p class="text-gray-400 mt-2 max-w-2xl">{{ Str::limit($channel->bio, 150) }}</p>
+                <p class="text-gray-400 mt-2 text-sm line-clamp-2 sm:line-clamp-none sm:max-w-2xl">{{ Str::limit($channel->bio, 150) }}</p>
             @endif
         </div>
 
         <!-- Subscribe Button -->
         @auth
             @if(auth()->id() !== $channel->id)
-                <form action="{{ route('channel.subscribe', $channel->username) }}" method="POST">
+                <form action="{{ route('channel.subscribe', $channel->username) }}" method="POST" class="flex-shrink-0 w-full sm:w-auto">
                     @csrf
-                    <button type="submit" class="px-6 py-2 rounded-full font-medium {{ $isSubscribed ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-900 hover:bg-gray-200' }}">
+                    <button type="submit" class="w-full sm:w-auto px-4 sm:px-6 py-2 rounded-full text-sm font-medium min-h-[44px] {{ $isSubscribed ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-900 hover:bg-gray-200' }}">
                         {{ $isSubscribed ? 'Subscribed' : 'Subscribe' }}
                     </button>
                 </form>
             @else
-                <a href="{{ route('studio.dashboard') }}" class="px-6 py-2 bg-gray-700 text-white rounded-full font-medium hover:bg-gray-600">
+                <a href="{{ route('studio.dashboard') }}" class="flex-shrink-0 w-full sm:w-auto text-center px-4 sm:px-6 py-2 bg-gray-700 text-white rounded-full text-sm font-medium hover:bg-gray-600 min-h-[44px] flex items-center justify-center">
                     Manage Channel
                 </a>
             @endif
         @else
-            <a href="{{ route('login') }}" class="px-6 py-2 bg-white text-gray-900 rounded-full font-medium hover:bg-gray-200">
+            <a href="{{ route('login') }}" class="flex-shrink-0 w-full sm:w-auto text-center px-4 sm:px-6 py-2 bg-white text-gray-900 rounded-full text-sm font-medium hover:bg-gray-200 min-h-[44px] flex items-center justify-center">
                 Subscribe
             </a>
         @endauth
     </div>
 
-    <!-- Tabs -->
-    <div class="border-b border-gray-800 mb-6">
-        <nav class="flex space-x-8">
+    <!-- Tabs - Horizontally scrollable on mobile -->
+    <div class="border-b border-gray-800 mb-4 sm:mb-6 -mx-2 sm:mx-0">
+        <nav class="flex gap-4 sm:gap-8 overflow-x-auto scrollbar-hide px-2 sm:px-0">
             <a href="{{ route('channel.show', $channel->username) }}" 
-               class="py-4 text-sm font-medium border-b-2 {{ request()->routeIs('channel.show') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
+               class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap flex-shrink-0 {{ request()->routeIs('channel.show') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
                 Home
             </a>
             <a href="{{ route('channel.videos', $channel->username) }}" 
-               class="py-4 text-sm font-medium border-b-2 {{ request()->routeIs('channel.videos') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
+               class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap flex-shrink-0 {{ request()->routeIs('channel.videos') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
                 Videos
             </a>
             <a href="{{ route('channel.shorts', $channel->username) }}" 
-               class="py-4 text-sm font-medium border-b-2 {{ request()->routeIs('channel.shorts') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
+               class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap flex-shrink-0 {{ request()->routeIs('channel.shorts') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
                 Shorts
             </a>
             <a href="{{ route('channel.playlists', $channel->username) }}" 
-               class="py-4 text-sm font-medium border-b-2 {{ request()->routeIs('channel.playlists') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
+               class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap flex-shrink-0 {{ request()->routeIs('channel.playlists') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
                 Playlists
             </a>
             <a href="{{ route('channel.about', $channel->username) }}" 
-               class="py-4 text-sm font-medium border-b-2 {{ request()->routeIs('channel.about') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
+               class="py-3 sm:py-4 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap flex-shrink-0 {{ request()->routeIs('channel.about') ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-white' }}">
                 About
             </a>
         </nav>

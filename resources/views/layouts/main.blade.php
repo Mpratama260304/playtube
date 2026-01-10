@@ -189,8 +189,8 @@
                 @include('layouts.partials.header')
 
                 <!-- Page Content -->
-                <main class="flex-1 pt-16">
-                    <div class="px-4 py-6 lg:px-6">
+                <main class="flex-1 pt-14 sm:pt-16">
+                    <div class="px-2 py-3 sm:px-4 sm:py-6 lg:px-6">
                         {{ $slot }}
                     </div>
                 </main>

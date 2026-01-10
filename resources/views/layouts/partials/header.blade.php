@@ -1,5 +1,5 @@
 <!-- Header -->
-<header class="fixed top-0 right-0 left-0 z-40 h-16 bg-white dark:bg-[#0f0f0f] border-b border-gray-200 dark:border-gray-800">
+<header class="fixed top-0 right-0 left-0 z-40 h-14 sm:h-16 bg-white dark:bg-[#0f0f0f] border-b border-gray-200 dark:border-gray-800">
     <div class="flex items-center justify-between h-full px-4">
         <!-- Left: Menu & Logo -->
         <div class="flex items-center gap-2 lg:gap-4">

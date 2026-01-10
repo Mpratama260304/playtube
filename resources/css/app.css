@@ -68,6 +68,17 @@
 @layer base {
     html {
         scroll-behavior: smooth;
+        /* Prevent horizontal overflow on mobile */
+        overflow-x: hidden;
+    }
+
+    body {
+        background-color: var(--color-bg-primary);
+        color: var(--color-text-primary);
+        /* Prevent horizontal overflow on mobile */
+        overflow-x: hidden;
+        width: 100%;
+        min-width: 0;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -82,11 +93,6 @@
             animation-iteration-count: 1 !important;
             transition-duration: 0.01ms !important;
         }
-    }
-
-    body {
-        background-color: var(--color-bg-primary);
-        color: var(--color-text-primary);
     }
 
     /* Focus visible styles */
@@ -353,5 +359,22 @@
     /* Focus ring utility */
     .focus-ring {
         @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2;
+    }
+
+    /* Prevent horizontal overflow on mobile */
+    .overflow-x-prevent {
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    /* Touch-friendly tap targets */
+    .tap-target {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Mobile-friendly button padding */
+    .btn-mobile {
+        @apply px-3 py-2 min-h-[44px];
     }
 }
