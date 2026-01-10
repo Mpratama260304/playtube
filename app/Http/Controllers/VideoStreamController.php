@@ -308,6 +308,11 @@ class VideoStreamController extends Controller
             'Cache-Control' => 'private, no-store, no-cache, must-revalidate',
             'Pragma' => 'no-cache',
             'Content-Disposition' => 'inline',
+            // CORS headers for Codespaces and cross-origin requests
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Headers' => 'Range, Content-Type',
+            'Access-Control-Expose-Headers' => 'Accept-Ranges, Content-Length, Content-Range',
         ];
 
         // Add Content-Range for partial content (206)

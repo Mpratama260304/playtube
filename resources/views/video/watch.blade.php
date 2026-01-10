@@ -72,7 +72,7 @@
                             class="w-full h-full"
                             controls
                             playsinline
-                            preload="auto"
+                            preload="metadata"
                             poster="{{ $video->thumbnail_url }}"
                             data-video-id="{{ $video->id }}"
                             controlslist="nodownload"
@@ -83,6 +83,7 @@
                             x-on:playing="onPlaying"
                             x-on:error="onError"
                             x-ref="videoPlayer"
+                            src="{{ route('video.stream', $video) }}"
                         >
                             Your browser does not support the video tag.
                         </video>
@@ -118,7 +119,7 @@
                                         :class="selectedQuality === 'auto' ? 'text-blue-400 font-medium' : 'text-white'"
                                     >
                                         <span>Auto</span>
-                                        <span x-show="selectedQuality === 'auto'" class="text-xs opacity-75" x-text="currentAutoQuality + 'p'"></span>
+                                        <span x-show="selectedQuality === 'auto' && currentAutoQuality !== 'original'" class="text-xs opacity-75" x-text="currentAutoQuality + 'p'"></span>
                                     </button>
                                     @foreach($video->available_qualities ?? [] as $quality => $info)
                                     <button 
@@ -566,11 +567,17 @@
                     
                     this.currentVideoSrc = this.getQualityUrl(initialQuality);
                     
-                    // Set video source
+                    // Only update video source if it's different from default or if quality renditions available
                     const video = document.getElementById('video-player');
                     if (video) {
-                        video.src = this.currentVideoSrc;
-                        this.loadingText = isMobile ? 'Loading ' + initialQuality + 'p...' : 'Loading...';
+                        // Only change src if we have specific renditions, otherwise use default from HTML
+                        if (Object.keys(this.availableQualities).length > 0 && this.currentVideoSrc !== video.src) {
+                            video.src = this.currentVideoSrc;
+                        } else {
+                            // Use existing src from HTML
+                            this.currentVideoSrc = video.src;
+                        }
+                        this.loadingText = isMobile ? 'Loading...' : 'Loading...';
                     }
                 },
                 
@@ -582,8 +589,13 @@
                     const qualityLadder = ['1080', '720', '480', '360'];
                     const availableList = qualityLadder.filter(q => this.availableQualities[q]);
                     
+                    // If no renditions available, return 'original' to use fallback stream
+                    if (availableList.length === 0) {
+                        return 'original';
+                    }
+                    
                     // Get highest available quality
-                    const highestQuality = availableList.length > 0 ? availableList[0] : '720';
+                    const highestQuality = availableList[0];
                     
                     // Mobile: prefer lower quality for data saving (480p or lower if available)
                     if (isMobile || width < 480) {
@@ -601,15 +613,12 @@
                 },
                 
                 getQualityUrl(quality) {
-                    if (quality === 'auto') {
+                    // Always fallback to base stream URL for 'auto', 'original', or missing quality
+                    if (quality === 'auto' || quality === 'original' || !this.availableQualities[quality]) {
                         return '{{ route('video.stream', $video) }}';
                     }
                     
-                    if (this.availableQualities[quality]) {
-                        return this.availableQualities[quality].url;
-                    }
-                    
-                    return '{{ route('video.stream', $video) }}';
+                    return this.availableQualities[quality].url;
                 },
                 
                 setQuality(quality) {
@@ -767,13 +776,13 @@
                             method: 'GET',
                             headers: { 'Range': 'bytes=0-524287' },
                             signal: controller.signal,
-                            mode: 'cors',
                             credentials: 'same-origin'
                         });
                         
                         clearTimeout(timeoutId);
                     } catch (e) {
                         // Ignore errors - this is just a warmup
+                        console.log('Cache warmup skipped:', e.message);
                     }
                 },
                 

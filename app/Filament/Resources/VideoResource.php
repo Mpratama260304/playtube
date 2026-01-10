@@ -495,26 +495,75 @@ class VideoResource extends Resource
                     ->visible(fn (Video $record) => $record->has_original && !$record->stream_ready && !in_array($record->processing_state, [Video::PROCESSING_QUEUED, Video::PROCESSING_RUNNING]))
                     ->requiresConfirmation()
                     ->modalHeading('Prepare Stream MP4')
-                    ->modalDescription('This will create a fast-start MP4 for instant playback. Choose how to process:')
-                    ->form([
-                        \Filament\Forms\Components\Radio::make('process_mode')
-                            ->label('Processing Mode')
-                            ->options([
-                                'queue' => '⏳ Queue (Background) - Uses queue worker',
-                                'sync' => '⚡ Process Now (Immediate) - Runs directly, may take a while',
-                            ])
-                            ->default('sync')
-                            ->required(),
-                    ])
+                    ->modalDescription(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = round($fileSize / 1024 / 1024, 1);
+                        $baseText = 'This will create a fast-start MP4 for instant playback.';
+                        
+                        if ($fileSizeMB > 200) {
+                            return $baseText . "\n\n⚠️ **Large file detected ({$fileSizeMB} MB)**\nSync processing is disabled for files over 200MB to prevent timeout. Please use Queue mode.";
+                        }
+                        
+                        return $baseText . "\n\n📁 File size: {$fileSizeMB} MB";
+                    })
+                    ->form(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $isLargeFile = $fileSizeMB > 200; // 200MB limit for sync (stream prep is faster than renditions)
+                        
+                        return [
+                            \Filament\Forms\Components\Radio::make('process_mode')
+                                ->label('Processing Mode')
+                                ->options(
+                                    $isLargeFile 
+                                        ? ['queue' => '⏳ Queue (Background) - Recommended for large files']
+                                        : [
+                                            'queue' => '⏳ Queue (Background) - Uses queue worker',
+                                            'sync' => '⚡ Process Now (Immediate) - Runs directly',
+                                        ]
+                                )
+                                ->default($isLargeFile ? 'queue' : 'sync')
+                                ->required()
+                                ->helperText($isLargeFile ? '⚠️ Sync mode disabled for files over 200MB to prevent timeout.' : null),
+                        ];
+                    })
                     ->action(function (Video $record, array $data) {
+                        // Check file size
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $processMode = $data['process_mode'] ?? 'queue';
+                        
+                        // Force queue for large files
+                        if ($fileSizeMB > 200 && $processMode === 'sync') {
+                            $processMode = 'queue';
+                            \Filament\Notifications\Notification::make()
+                                ->title('Using Queue Mode')
+                                ->body('File is too large for sync processing. Switched to queue mode.')
+                                ->warning()
+                                ->send();
+                        }
+                        
                         $record->update([
                             'processing_state' => Video::PROCESSING_QUEUED,
                             'processing_error' => null,
                         ]);
                         
-                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                        if ($processMode === 'sync') {
                             // Run synchronously (immediate)
                             try {
+                                set_time_limit(300); // 5 minutes max for stream prep
                                 $record->update(['processing_state' => Video::PROCESSING_RUNNING]);
                                 dispatch_sync(new PrepareStreamMp4Job($record));
                                 
@@ -548,20 +597,77 @@ class VideoResource extends Resource
                     ->visible(fn (Video $record) => $record->stream_ready && empty($record->renditions))
                     ->requiresConfirmation()
                     ->modalHeading('Build Quality Renditions')
-                    ->modalDescription('This will create multiple quality versions (360p, 480p, 720p, 1080p).')
-                    ->form([
-                        \Filament\Forms\Components\Radio::make('process_mode')
-                            ->label('Processing Mode')
-                            ->options([
-                                'queue' => '⏳ Queue (Background)',
-                                'sync' => '⚡ Process Now (Immediate)',
-                            ])
-                            ->default('sync')
-                            ->required(),
-                    ])
+                    ->modalDescription(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->stream_path && Storage::disk('public')->exists($record->stream_path)) {
+                            $fileSize = Storage::disk('public')->size($record->stream_path);
+                        } elseif ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = round($fileSize / 1024 / 1024, 1);
+                        $baseText = 'This will create multiple quality versions (360p, 480p, 720p, 1080p).';
+                        
+                        if ($fileSizeMB > 100) {
+                            return $baseText . "\n\n⚠️ **Large file detected ({$fileSizeMB} MB)**\nSync processing is disabled for files over 100MB to prevent timeout. Please use Queue mode.";
+                        }
+                        
+                        return $baseText . "\n\n📁 File size: {$fileSizeMB} MB";
+                    })
+                    ->form(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->stream_path && Storage::disk('public')->exists($record->stream_path)) {
+                            $fileSize = Storage::disk('public')->size($record->stream_path);
+                        } elseif ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $isLargeFile = $fileSizeMB > 100; // 100MB limit for sync
+                        
+                        return [
+                            \Filament\Forms\Components\Radio::make('process_mode')
+                                ->label('Processing Mode')
+                                ->options(
+                                    $isLargeFile 
+                                        ? ['queue' => '⏳ Queue (Background) - Recommended for large files']
+                                        : [
+                                            'queue' => '⏳ Queue (Background)',
+                                            'sync' => '⚡ Process Now (Immediate)',
+                                        ]
+                                )
+                                ->default('queue')
+                                ->required()
+                                ->helperText($isLargeFile ? '⚠️ Sync mode disabled for files over 100MB to prevent timeout.' : null),
+                        ];
+                    })
                     ->action(function (Video $record, array $data) {
-                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                        // Double-check file size for sync mode
+                        $fileSize = 0;
+                        if ($record->stream_path && Storage::disk('public')->exists($record->stream_path)) {
+                            $fileSize = Storage::disk('public')->size($record->stream_path);
+                        } elseif ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $processMode = $data['process_mode'] ?? 'queue';
+                        
+                        // Force queue for large files even if somehow sync was selected
+                        if ($fileSizeMB > 100 && $processMode === 'sync') {
+                            $processMode = 'queue';
+                            \Filament\Notifications\Notification::make()
+                                ->title('Using Queue Mode')
+                                ->body('File is too large for sync processing. Switched to queue mode.')
+                                ->warning()
+                                ->send();
+                        }
+                        
+                        if ($processMode === 'sync') {
                             try {
+                                // Set extended timeout for smaller files
+                                set_time_limit(600); // 10 minutes max
+                                
                                 dispatch_sync(new BuildRenditionsJob($record));
                                 
                                 \Filament\Notifications\Notification::make()
@@ -581,7 +687,7 @@ class VideoResource extends Resource
                             
                             \Filament\Notifications\Notification::make()
                                 ->title('Rendition Build Queued')
-                                ->body('Quality versions will be generated.')
+                                ->body('Quality versions will be generated. Make sure queue worker is running!')
                                 ->success()
                                 ->send();
                         }
@@ -593,18 +699,61 @@ class VideoResource extends Resource
                     ->visible(fn (Video $record) => $record->has_original && $record->processing_state === Video::PROCESSING_FAILED)
                     ->requiresConfirmation()
                     ->modalHeading('Retry Processing')
-                    ->modalDescription('This will clear the error and process the video again.')
-                    ->form([
-                        \Filament\Forms\Components\Radio::make('process_mode')
-                            ->label('Processing Mode')
-                            ->options([
-                                'queue' => '⏳ Queue (Background)',
-                                'sync' => '⚡ Process Now (Immediate)',
-                            ])
-                            ->default('sync')
-                            ->required(),
-                    ])
+                    ->modalDescription(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = round($fileSize / 1024 / 1024, 1);
+                        $baseText = 'This will clear the error and process the video again.';
+                        
+                        if ($fileSizeMB > 200) {
+                            return $baseText . "\n\n⚠️ **Large file ({$fileSizeMB} MB)** - Queue mode recommended.";
+                        }
+                        
+                        return $baseText . "\n\n📁 File size: {$fileSizeMB} MB";
+                    })
+                    ->form(function (Video $record) {
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $isLargeFile = $fileSizeMB > 200;
+                        
+                        return [
+                            \Filament\Forms\Components\Radio::make('process_mode')
+                                ->label('Processing Mode')
+                                ->options(
+                                    $isLargeFile 
+                                        ? ['queue' => '⏳ Queue (Background) - Recommended for large files']
+                                        : [
+                                            'queue' => '⏳ Queue (Background)',
+                                            'sync' => '⚡ Process Now (Immediate)',
+                                        ]
+                                )
+                                ->default($isLargeFile ? 'queue' : 'sync')
+                                ->required()
+                                ->helperText($isLargeFile ? '⚠️ Sync mode disabled for files over 200MB.' : null),
+                        ];
+                    })
                     ->action(function (Video $record, array $data) {
+                        // Check file size
+                        $fileSize = 0;
+                        if ($record->original_path && Storage::disk('public')->exists($record->original_path)) {
+                            $fileSize = Storage::disk('public')->size($record->original_path);
+                        }
+                        
+                        $fileSizeMB = $fileSize / 1024 / 1024;
+                        $processMode = $data['process_mode'] ?? 'queue';
+                        
+                        // Force queue for large files
+                        if ($fileSizeMB > 200 && $processMode === 'sync') {
+                            $processMode = 'queue';
+                        }
+                        
                         $record->update([
                             'processing_state' => Video::PROCESSING_QUEUED,
                             'processing_progress' => null,
@@ -613,8 +762,9 @@ class VideoResource extends Resource
                             'stream_path' => null,
                         ]);
                         
-                        if (($data['process_mode'] ?? 'sync') === 'sync') {
+                        if ($processMode === 'sync') {
                             try {
+                                set_time_limit(300);
                                 $record->update(['processing_state' => Video::PROCESSING_RUNNING]);
                                 dispatch_sync(new PrepareStreamMp4Job($record));
                                 
@@ -635,7 +785,7 @@ class VideoResource extends Resource
                             
                             \Filament\Notifications\Notification::make()
                                 ->title('Retry Queued')
-                                ->body('Processing will restart shortly.')
+                                ->body('Processing will restart shortly. Make sure queue worker is running!')
                                 ->success()
                                 ->send();
                         }
