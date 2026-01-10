@@ -43,6 +43,9 @@ class Video extends Model
         'is_featured',
         'duration_seconds',
         'original_path',
+        'stream_path',
+        'renditions',
+        'stream_ready',
         'hls_master_path',
         'thumbnail_path',
         'hls_enabled',
@@ -65,6 +68,8 @@ class Video extends Model
     protected $casts = [
         'is_short' => 'boolean',
         'is_featured' => 'boolean',
+        'stream_ready' => 'boolean',
+        'renditions' => 'array',
         'hls_enabled' => 'boolean',
         'published_at' => 'datetime',
         'processed_at' => 'datetime',
@@ -529,5 +534,78 @@ class Video extends Model
             ->toArray();
 
         $this->tags()->sync($tagIds);
+    }
+
+    /**
+     * Get the optimal stream source for playback
+     * Prioritizes: stream_path (faststart MP4) > original_path
+     */
+    public function getStreamSourceAttribute(): ?string
+    {
+        if ($this->stream_ready && $this->stream_path) {
+            return $this->stream_path;
+        }
+        
+        return $this->original_path;
+    }
+
+    /**
+     * Get playback URL for the optimal stream source
+     */
+    public function getPlaybackUrlAttribute(): string
+    {
+        return '/stream/' . $this->uuid;
+    }
+
+    /**
+     * Get available quality renditions for quality selector
+     * Returns array like: ['360' => ['url' => '...', 'width' => 640, ...], ...]
+     */
+    public function getAvailableQualitiesAttribute(): array
+    {
+        if (!$this->renditions || !is_array($this->renditions)) {
+            return [];
+        }
+
+        $qualities = [];
+        foreach ($this->renditions as $quality => $info) {
+            if (isset($info['path']) && Storage::disk('public')->exists($info['path'])) {
+                $qualities[$quality] = array_merge($info, [
+                    'url' => '/stream/' . $this->uuid . '?quality=' . $quality,
+                ]);
+            }
+        }
+
+        return $qualities;
+    }
+
+    /**
+     * Check if stream MP4 is ready for instant playback
+     */
+    public function isStreamReady(): bool
+    {
+        return $this->stream_ready && 
+               $this->stream_path && 
+               Storage::disk('public')->exists($this->stream_path);
+    }
+
+    /**
+     * Check if renditions are available
+     */
+    public function hasRenditions(): bool
+    {
+        return !empty($this->renditions) && is_array($this->renditions);
+    }
+
+    /**
+     * Get rendition count
+     */
+    public function getRenditionCountAttribute(): int
+    {
+        if (!$this->renditions || !is_array($this->renditions)) {
+            return 0;
+        }
+        
+        return count($this->renditions);
     }
 }

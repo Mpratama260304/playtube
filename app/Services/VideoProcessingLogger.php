@@ -10,6 +10,7 @@ class VideoProcessingLogger
 {
     /**
      * Log a processing message for a video.
+     * Updated for new schema: job_type, status, metadata (no level column)
      */
     public function log(
         Video $video,
@@ -18,13 +19,20 @@ class VideoProcessingLogger
         array $context = [],
         string $job = 'hls'
     ): VideoProcessingLog {
-        // Write to database
+        // Map level to status for new schema
+        $status = match ($level) {
+            'error' => 'failed',
+            'warning' => 'processing',
+            default => 'processing',
+        };
+
+        // Write to database with new column names
         $logEntry = VideoProcessingLog::create([
             'video_id' => $video->id,
-            'job' => $job,
-            'level' => $level,
+            'job_type' => $job,
+            'status' => $status,
             'message' => $message,
-            'context' => !empty($context) ? $context : null,
+            'metadata' => !empty($context) ? $context : null,
             'created_at' => now(),
         ]);
 
@@ -32,7 +40,7 @@ class VideoProcessingLogger
         $logContext = array_merge([
             'video_id' => $video->id,
             'uuid' => $video->uuid,
-            'job' => $job,
+            'job_type' => $job,
         ], $context);
 
         match ($level) {
@@ -85,7 +93,7 @@ class VideoProcessingLogger
         $query = VideoProcessingLog::where('video_id', $video->id);
         
         if ($job) {
-            $query->where('job', $job);
+            $query->where('job_type', $job);
         }
 
         $total = $query->count();
@@ -97,14 +105,14 @@ class VideoProcessingLogger
         $toDelete = $total - $keepLast;
         
         $oldestToKeep = VideoProcessingLog::where('video_id', $video->id)
-            ->when($job, fn($q) => $q->where('job', $job))
+            ->when($job, fn($q) => $q->where('job_type', $job))
             ->orderBy('created_at', 'desc')
             ->skip($keepLast)
             ->first();
 
         if ($oldestToKeep) {
             return VideoProcessingLog::where('video_id', $video->id)
-                ->when($job, fn($q) => $q->where('job', $job))
+                ->when($job, fn($q) => $q->where('job_type', $job))
                 ->where('created_at', '<', $oldestToKeep->created_at)
                 ->delete();
         }

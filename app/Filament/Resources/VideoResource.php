@@ -4,8 +4,9 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\VideoResource\Pages;
 use App\Filament\Resources\VideoResource\RelationManagers;
+use App\Jobs\PrepareStreamMp4Job;
+use App\Jobs\BuildRenditionsJob;
 use App\Models\Video;
-use App\Services\HlsService;
 use App\Services\ThumbnailService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -89,48 +90,40 @@ class VideoResource extends Resource
                     ->columns(2)
                     ->visible(fn ($record) => $record !== null),
 
-                // HLS Settings Section - Improved with state machine awareness
-                Forms\Components\Section::make('HLS Streaming')
-                    ->description('Configure adaptive bitrate streaming for this video')
+                // MP4 Streaming Section - Progressive download with quality renditions
+                Forms\Components\Section::make('Video Streaming')
+                    ->description('Progressive MP4 streaming with multi-quality renditions')
                     ->schema([
-                        Forms\Components\Toggle::make('hls_enabled')
-                            ->label('Enable HLS Transcoding')
-                            ->helperText('When enabled and saved, HLS transcoding will be queued.')
-                            ->live()
-                            ->default(false),
-                        
-                        // Improved HLS status display
-                        Forms\Components\Placeholder::make('hls_status_display')
-                            ->label('HLS Status')
+                        Forms\Components\Placeholder::make('stream_status_display')
+                            ->label('Stream Status')
                             ->content(function ($record) {
                                 if (!$record) return 'N/A';
                                 
-                                return self::getHlsStatusHtml($record);
+                                return self::getStreamStatusHtml($record);
                             }),
 
-                        // Timestamps display
-                        Forms\Components\Placeholder::make('hls_timestamps')
-                            ->label('Processing Timeline')
+                        Forms\Components\Placeholder::make('renditions_display')
+                            ->label('Available Qualities')
                             ->content(function ($record) {
                                 if (!$record) return 'N/A';
                                 
-                                return self::getHlsTimestampsHtml($record);
+                                return self::getRenditionsHtml($record);
                             }),
 
-                        // Progress display with intelligent formatting
-                        Forms\Components\Placeholder::make('hls_progress_display')
+                        // Progress display
+                        Forms\Components\Placeholder::make('processing_progress_display')
                             ->label('Progress')
                             ->content(function ($record) {
                                 if (!$record) return 'N/A';
                                 
-                                return self::getHlsProgressHtml($record);
+                                return self::getProcessingProgressHtml($record);
                             })
                             ->visible(fn ($record) => $record && in_array($record->processing_state, [
                                 Video::PROCESSING_QUEUED, 
                                 Video::PROCESSING_RUNNING
                             ])),
 
-                        Forms\Components\Placeholder::make('hls_error')
+                        Forms\Components\Placeholder::make('processing_error')
                             ->label('Error Details')
                             ->content(fn ($record) => $record?->processing_error ?? 'None')
                             ->visible(fn ($record) => $record && $record->processing_state === Video::PROCESSING_FAILED),
@@ -138,17 +131,14 @@ class VideoResource extends Resource
                     ->columns(1)
                     ->visible(fn ($record) => $record !== null),
 
-                // HLS Health Check Section
-                Forms\Components\Section::make('HLS System Health')
-                    ->description('System prerequisites for HLS transcoding')
+                // System Health Check Section
+                Forms\Components\Section::make('Processing System Health')
+                    ->description('System prerequisites for video processing')
                     ->schema([
-                        Forms\Components\Placeholder::make('hls_health')
+                        Forms\Components\Placeholder::make('system_health')
                             ->label('')
                             ->content(function () {
-                                $hlsService = app(HlsService::class);
-                                $health = $hlsService->getHealthStatus();
-                                
-                                return self::getSystemHealthHtml($health);
+                                return self::getSystemHealthHtml(self::checkSystemHealth());
                             }),
                     ])
                     ->collapsible()
@@ -167,86 +157,71 @@ class VideoResource extends Resource
     }
 
     /**
-     * Generate HLS status HTML with proper state display.
+     * Generate stream status HTML with proper state display.
      */
-    protected static function getHlsStatusHtml(Video $record): \Illuminate\Support\HtmlString
+    protected static function getStreamStatusHtml(Video $record): \Illuminate\Support\HtmlString
     {
-        // Use single source of truth
-        if ($record->isHlsReady()) {
+        if ($record->stream_ready && $record->stream_path) {
             return new \Illuminate\Support\HtmlString(
-                '<span class="text-green-600 font-semibold">✅ HLS Ready</span><br>' .
-                '<span class="text-sm text-gray-500">Master playlist exists and accessible</span>'
+                '<span class="text-green-600 font-semibold">✅ Stream Ready</span><br>' .
+                '<span class="text-sm text-gray-500">Fast-start MP4 available for instant playback</span>'
             );
         }
 
-        $statusLabel = $record->hls_status_label;
-
-        return new \Illuminate\Support\HtmlString(match ($statusLabel) {
-            'queued' => '<span class="text-blue-600 font-semibold">⏳ Queued</span><br>' .
-                '<span class="text-sm text-gray-500">Waiting for queue worker to pick up job</span>',
+        return new \Illuminate\Support\HtmlString(match ($record->processing_state) {
+            Video::PROCESSING_QUEUED => '<span class="text-blue-600 font-semibold">⏳ Queued</span><br>' .
+                '<span class="text-sm text-gray-500">Waiting for queue worker to process</span>',
             
-            'stuck_queued' => '<span class="text-red-600 font-semibold">⚠️ Stuck in Queue</span><br>' .
-                '<span class="text-sm text-red-500">Job queued for >2 min. Is queue worker running?</span><br>' .
-                '<code class="text-xs bg-gray-100 px-1">php artisan queue:work --queue=hls</code>',
+            Video::PROCESSING_RUNNING => '<span class="text-yellow-600 font-semibold">🔄 Processing</span><br>' .
+                '<span class="text-sm text-gray-500">Creating streamable MP4...</span>',
             
-            'processing' => '<span class="text-yellow-600 font-semibold">🔄 Processing</span><br>' .
-                '<span class="text-sm text-gray-500">FFmpeg is actively transcoding</span>',
-            
-            'stuck_processing' => '<span class="text-red-600 font-semibold">⚠️ Job May Be Hung</span><br>' .
-                '<span class="text-sm text-red-500">No heartbeat for >2 minutes</span>',
-            
-            'failed' => '<span class="text-red-600 font-semibold">❌ Failed</span><br>' .
+            Video::PROCESSING_FAILED => '<span class="text-red-600 font-semibold">❌ Failed</span><br>' .
                 '<span class="text-sm text-red-500">' . e($record->processing_error ?? 'Unknown error') . '</span>',
             
-            'pending' => '<span class="text-gray-500 font-semibold">⏸️ Pending</span><br>' .
-                '<span class="text-sm text-gray-500">HLS enabled, will process on save</span>',
-            
-            default => '<span class="text-gray-400">⚪ Disabled</span>',
+            default => $record->original_path 
+                ? '<span class="text-gray-500 font-semibold">⏸️ Not Processed</span><br>' .
+                  '<span class="text-sm text-gray-500">Click "Prepare Stream" to create fast-start MP4</span>'
+                : '<span class="text-gray-400">⚪ No original file</span>',
         });
     }
 
     /**
-     * Generate HLS timestamps HTML.
+     * Generate renditions HTML showing available qualities.
      */
-    protected static function getHlsTimestampsHtml(Video $record): \Illuminate\Support\HtmlString
+    protected static function getRenditionsHtml(Video $record): \Illuminate\Support\HtmlString
     {
-        $lines = [];
-
-        if ($record->hls_queued_at) {
-            $lines[] = "<strong>Queued:</strong> {$record->hls_queued_at->format('M d, H:i:s')}";
+        $renditions = $record->renditions ?? [];
+        
+        if (empty($renditions)) {
+            return new \Illuminate\Support\HtmlString(
+                '<span class="text-gray-400">No renditions yet</span><br>' .
+                '<span class="text-sm text-gray-500">Renditions will be generated after stream is ready</span>'
+            );
         }
 
-        if ($record->hls_started_at) {
-            $lines[] = "<strong>Started:</strong> {$record->hls_started_at->format('M d, H:i:s')}";
-        }
-
-        if ($record->hls_last_heartbeat_at) {
-            $ago = $record->hls_last_heartbeat_at->diffForHumans();
-            $isStale = $record->is_heartbeat_stale;
-            $status = $isStale ? '⚠️ stale' : '✅ alive';
-            $lines[] = "<strong>Last Heartbeat:</strong> {$ago} ({$status})";
-        }
-
-        if ($record->processing_finished_at) {
-            $lines[] = "<strong>Finished:</strong> {$record->processing_finished_at->format('M d, H:i:s')}";
-            
-            if ($record->hls_started_at) {
-                $duration = $record->hls_started_at->diffInSeconds($record->processing_finished_at);
-                $lines[] = "<strong>Duration:</strong> {$duration}s";
+        $badges = [];
+        $qualityOrder = ['1080p', '720p', '480p', '360p'];
+        
+        foreach ($qualityOrder as $quality) {
+            if (isset($renditions[$quality])) {
+                $badges[] = '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">' . $quality . '</span>';
             }
         }
 
-        if (empty($lines)) {
-            return new \Illuminate\Support\HtmlString('<span class="text-gray-400">Not started</span>');
+        if (empty($badges)) {
+            return new \Illuminate\Support\HtmlString('<span class="text-gray-400">No valid renditions</span>');
         }
 
-        return new \Illuminate\Support\HtmlString(implode('<br>', $lines));
+        return new \Illuminate\Support\HtmlString(
+            '<div class="flex flex-wrap gap-1">' . implode(' ', $badges) . '</div>' .
+            '<span class="text-sm text-gray-500 mt-1 block">' . count($badges) . ' quality option(s) available</span>'
+        );
     }
 
     /**
-     * Generate HLS progress HTML with smart display.
+     * Generate processing progress HTML.
      */
-    protected static function getHlsProgressHtml(Video $record): \Illuminate\Support\HtmlString
+    protected static function getProcessingProgressHtml(Video $record): \Illuminate\Support\HtmlString
     {
         $state = $record->processing_state;
         $progress = $record->processing_progress;
@@ -260,30 +235,15 @@ class VideoResource extends Resource
         }
 
         if ($state === Video::PROCESSING_RUNNING) {
-            // Handle null/0 progress intelligently
-            if ($progress === null) {
+            if ($progress === null || $progress === 0) {
                 return new \Illuminate\Support\HtmlString(
                     '<div class="flex items-center gap-2">' .
                     '<div class="w-full bg-gray-200 rounded-full h-2.5">' .
                     '<div class="bg-yellow-500 h-2.5 rounded-full animate-pulse" style="width: 100%"></div>' .
                     '</div>' .
-                    '<span class="text-sm text-gray-500">Estimating...</span>' .
+                    '<span class="text-sm text-gray-500">Starting...</span>' .
                     '</div>'
                 );
-            }
-
-            if ($progress === 0) {
-                // Check heartbeat to determine if actually processing
-                if ($record->hls_last_heartbeat_at && !$record->is_heartbeat_stale) {
-                    return new \Illuminate\Support\HtmlString(
-                        '<div class="flex items-center gap-2">' .
-                        '<div class="w-full bg-gray-200 rounded-full h-2.5">' .
-                        '<div class="bg-yellow-500 h-2.5 rounded-full" style="width: 5%"></div>' .
-                        '</div>' .
-                        '<span class="text-sm text-gray-500">&lt;1% (starting up)</span>' .
-                        '</div>'
-                    );
-                }
             }
 
             return new \Illuminate\Support\HtmlString(
@@ -297,6 +257,50 @@ class VideoResource extends Resource
         }
 
         return new \Illuminate\Support\HtmlString('<span class="text-gray-400">N/A</span>');
+    }
+
+    /**
+     * Check system health for video processing.
+     */
+    protected static function checkSystemHealth(): array
+    {
+        $ffmpegPath = config('playtube.ffmpeg_path', '/usr/bin/ffmpeg');
+        $ffprobePath = config('playtube.ffprobe_path', '/usr/bin/ffprobe');
+        
+        $ffmpegAvailable = file_exists($ffmpegPath) && is_executable($ffmpegPath);
+        $ffprobeAvailable = file_exists($ffprobePath) && is_executable($ffprobePath);
+        
+        $queueConnection = config('queue.default');
+        
+        return [
+            'ffmpeg_available' => $ffmpegAvailable,
+            'ffmpeg_path' => $ffmpegPath,
+            'ffmpeg_version' => $ffmpegAvailable ? self::getToolVersion($ffmpegPath) : null,
+            'ffprobe_available' => $ffprobeAvailable,
+            'ffprobe_path' => $ffprobePath,
+            'ffprobe_version' => $ffprobeAvailable ? self::getToolVersion($ffprobePath) : null,
+            'queue_connection' => $queueConnection,
+            'queue_is_sync' => $queueConnection === 'sync',
+            'queue_stats' => [
+                'videos_queued' => Video::where('processing_state', Video::PROCESSING_QUEUED)->count(),
+                'videos_processing' => Video::where('processing_state', Video::PROCESSING_RUNNING)->count(),
+                'videos_stuck' => 0,
+                'pending_jobs' => 0,
+            ],
+            'warnings' => [],
+        ];
+    }
+
+    /**
+     * Get version of ffmpeg/ffprobe.
+     */
+    protected static function getToolVersion(string $path): ?string
+    {
+        $output = shell_exec($path . ' -version 2>/dev/null | head -1');
+        if ($output && preg_match('/version\s+([\d.]+)/', $output, $matches)) {
+            return $matches[1];
+        }
+        return null;
     }
 
     /**
@@ -330,14 +334,9 @@ class VideoResource extends Resource
         // Queue stats
         $stats = $health['queue_stats'];
         $lines[] = '';
-        $lines[] = '**Queue Status:**';
+        $lines[] = '**Processing Status:**';
         $lines[] = "- Videos Queued: {$stats['videos_queued']}";
         $lines[] = "- Videos Processing: {$stats['videos_processing']}";
-        $lines[] = "- Videos Stuck: {$stats['videos_stuck']}";
-        
-        if ($health['queue_connection'] === 'database') {
-            $lines[] = "- Pending Jobs (DB): {$stats['pending_hls_jobs']}";
-        }
         
         // Warnings
         if (!empty($health['warnings'])) {
@@ -390,30 +389,35 @@ class VideoResource extends Resource
                     ->label('Featured')
                     ->boolean()
                     ->toggleable(isToggledHiddenByDefault: true),
-                // Improved HLS column with proper state display
-                Tables\Columns\TextColumn::make('hls_status')
-                    ->label('HLS')
-                    ->state(fn (Video $record): string => $record->hls_status_label)
+                // Stream status column
+                Tables\Columns\TextColumn::make('stream_status')
+                    ->label('Stream')
+                    ->state(fn (Video $record): string => $record->stream_ready ? 'ready' : ($record->processing_state ?? 'pending'))
                     ->formatStateUsing(function (string $state, Video $record): string {
                         return match ($state) {
                             'ready' => '✅ Ready',
-                            'queued' => '⏳ Queued',
-                            'stuck_queued' => '⚠️ Stuck (Q)',
-                            'processing' => '🔄 ' . ($record->processing_progress ?? '?') . '%',
-                            'stuck_processing' => '⚠️ Hung',
-                            'failed' => '❌ Failed',
-                            'pending' => '⏸️ Pending',
-                            default => '⚪ Off',
+                            Video::PROCESSING_QUEUED => '⏳ Queued',
+                            Video::PROCESSING_RUNNING => '🔄 ' . ($record->processing_progress ?? '?') . '%',
+                            Video::PROCESSING_FAILED => '❌ Failed',
+                            default => '⚪ Pending',
                         };
                     })
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'ready' => 'success',
-                        'queued', 'pending' => 'info',
-                        'processing' => 'warning',
-                        'stuck_queued', 'stuck_processing', 'failed' => 'danger',
+                        Video::PROCESSING_QUEUED => 'info',
+                        Video::PROCESSING_RUNNING => 'warning',
+                        Video::PROCESSING_FAILED => 'danger',
                         default => 'gray',
                     })
+                    ->toggleable(),
+                // Renditions column
+                Tables\Columns\TextColumn::make('renditions_count')
+                    ->label('Qualities')
+                    ->state(fn (Video $record): int => count($record->renditions ?? []))
+                    ->formatStateUsing(fn (int $state): string => $state > 0 ? "{$state} quality" : '—')
+                    ->badge()
+                    ->color(fn (int $state): string => $state > 0 ? 'success' : 'gray')
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('views_count')
                     ->label('Views')
@@ -441,10 +445,10 @@ class VideoResource extends Resource
                     ->label('Featured'),
                 Tables\Filters\TernaryFilter::make('is_short')
                     ->label('Shorts'),
-                Tables\Filters\TernaryFilter::make('hls_enabled')
-                    ->label('HLS Enabled'),
+                Tables\Filters\TernaryFilter::make('stream_ready')
+                    ->label('Stream Ready'),
                 Tables\Filters\SelectFilter::make('processing_state')
-                    ->label('HLS State')
+                    ->label('Processing State')
                     ->options([
                         Video::PROCESSING_QUEUED => 'Queued',
                         Video::PROCESSING_RUNNING => 'Processing',
@@ -454,101 +458,68 @@ class VideoResource extends Resource
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\Action::make('generateHls')
-                    ->label('Generate HLS')
+                Tables\Actions\Action::make('prepareStream')
+                    ->label('Prepare Stream')
                     ->icon('heroicon-o-play-circle')
                     ->color('success')
-                    ->visible(fn (Video $record) => $record->has_original && $record->can_generate_hls)
+                    ->visible(fn (Video $record) => $record->has_original && !$record->stream_ready && !in_array($record->processing_state, [Video::PROCESSING_QUEUED, Video::PROCESSING_RUNNING]))
                     ->requiresConfirmation()
-                    ->modalHeading('Generate HLS Stream')
-                    ->modalDescription('This will queue HLS transcoding. Make sure a queue worker is running.')
+                    ->modalHeading('Prepare Stream MP4')
+                    ->modalDescription('This will create a fast-start MP4 for instant playback. Make sure a queue worker is running.')
                     ->action(function (Video $record) {
-                        $record->update(['hls_enabled' => true]);
+                        $record->update([
+                            'processing_state' => Video::PROCESSING_QUEUED,
+                            'processing_error' => null,
+                        ]);
                         
-                        $hlsService = app(HlsService::class);
-                        $result = $hlsService->enqueue($record, 'admin_table_action');
+                        PrepareStreamMp4Job::dispatch($record);
                         
-                        if ($result['success']) {
-                            \Filament\Notifications\Notification::make()
-                                ->title('HLS Transcoding Queued')
-                                ->body($result['message'])
-                                ->success()
-                                ->send();
-                        } else {
-                            \Filament\Notifications\Notification::make()
-                                ->title('HLS Generation Failed')
-                                ->body($result['message'])
-                                ->danger()
-                                ->send();
-                        }
+                        \Filament\Notifications\Notification::make()
+                            ->title('Stream Preparation Queued')
+                            ->body('Video will be processed shortly.')
+                            ->success()
+                            ->send();
                     }),
-                Tables\Actions\Action::make('retryHls')
-                    ->label('Retry HLS')
+                Tables\Actions\Action::make('buildRenditions')
+                    ->label('Build Renditions')
+                    ->icon('heroicon-o-squares-2x2')
+                    ->color('info')
+                    ->visible(fn (Video $record) => $record->stream_ready && empty($record->renditions))
+                    ->requiresConfirmation()
+                    ->modalHeading('Build Quality Renditions')
+                    ->modalDescription('This will create multiple quality versions (360p, 480p, 720p, 1080p).')
+                    ->action(function (Video $record) {
+                        BuildRenditionsJob::dispatch($record);
+                        
+                        \Filament\Notifications\Notification::make()
+                            ->title('Rendition Build Queued')
+                            ->body('Quality versions will be generated.')
+                            ->success()
+                            ->send();
+                    }),
+                Tables\Actions\Action::make('retryProcessing')
+                    ->label('Retry')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
                     ->visible(fn (Video $record) => $record->has_original && $record->processing_state === Video::PROCESSING_FAILED)
                     ->requiresConfirmation()
-                    ->modalHeading('Retry HLS Transcoding')
-                    ->modalDescription('This will clear the error and queue HLS transcoding again.')
+                    ->modalHeading('Retry Processing')
+                    ->modalDescription('This will clear the error and queue processing again.')
                     ->action(function (Video $record) {
-                        // Clear previous state
                         $record->update([
-                            'hls_enabled' => true,
-                            'processing_state' => null,
+                            'processing_state' => Video::PROCESSING_QUEUED,
                             'processing_progress' => null,
                             'processing_error' => null,
-                            'hls_queued_at' => null,
-                            'hls_started_at' => null,
-                            'hls_last_heartbeat_at' => null,
+                            'stream_ready' => false,
+                            'stream_path' => null,
                         ]);
                         
-                        $hlsService = app(HlsService::class);
-                        $result = $hlsService->enqueue($record, 'admin_retry');
+                        PrepareStreamMp4Job::dispatch($record);
                         
                         \Filament\Notifications\Notification::make()
-                            ->title($result['success'] ? 'HLS Retry Queued' : 'Retry Failed')
-                            ->body($result['message'])
-                            ->color($result['success'] ? 'success' : 'danger')
-                            ->send();
-                    }),
-                Tables\Actions\Action::make('rebuildHls')
-                    ->label('Rebuild HLS')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('warning')
-                    ->visible(fn (Video $record) => $record->has_original && $record->isHlsReady())
-                    ->requiresConfirmation()
-                    ->modalHeading('Rebuild HLS Stream')
-                    ->modalDescription('This will delete existing HLS files and regenerate them.')
-                    ->action(function (Video $record) {
-                        // Delete existing HLS directory
-                        $hlsDir = $record->hls_directory;
-                        if ($hlsDir) {
-                            $fullPath = Storage::disk('public')->path($hlsDir);
-                            if (File::isDirectory($fullPath)) {
-                                File::deleteDirectory($fullPath);
-                            }
-                        }
-                        
-                        $record->update([
-                            'hls_master_path' => null,
-                            'hls_enabled' => true,
-                            'processing_state' => null,
-                            'processing_progress' => null,
-                            'processing_error' => null,
-                            'hls_queued_at' => null,
-                            'hls_started_at' => null,
-                            'hls_last_heartbeat_at' => null,
-                            'processing_started_at' => null,
-                            'processing_finished_at' => null,
-                        ]);
-                        
-                        $hlsService = app(HlsService::class);
-                        $result = $hlsService->enqueue($record, 'admin_rebuild');
-                        
-                        \Filament\Notifications\Notification::make()
-                            ->title($result['success'] ? 'HLS Rebuild Started' : 'Rebuild Failed')
-                            ->body($result['message'])
-                            ->color($result['success'] ? 'success' : 'danger')
+                            ->title('Retry Queued')
+                            ->body('Processing will restart shortly.')
+                            ->success()
                             ->send();
                     }),
                 Tables\Actions\Action::make('viewLogs')
@@ -562,40 +533,32 @@ class VideoResource extends Resource
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
-                    Tables\Actions\BulkAction::make('generateHlsBulk')
-                        ->label('Generate HLS')
+                    Tables\Actions\BulkAction::make('prepareStreamBulk')
+                        ->label('Prepare Streams')
                         ->icon('heroicon-o-play-circle')
                         ->color('success')
                         ->requiresConfirmation()
-                        ->modalHeading('Generate HLS for Selected Videos')
+                        ->modalHeading('Prepare Streams for Selected Videos')
                         ->action(function (\Illuminate\Database\Eloquent\Collection $records) {
-                            $hlsService = app(HlsService::class);
                             $queued = 0;
                             $skipped = 0;
-                            $errors = [];
                             
                             foreach ($records as $record) {
-                                if ($record->has_original && $record->can_generate_hls) {
-                                    $record->update(['hls_enabled' => true]);
-                                    $result = $hlsService->enqueue($record, 'admin_bulk_action');
-                                    if ($result['success']) {
-                                        $queued++;
-                                    } else {
-                                        $errors[] = "{$record->title}: {$result['message']}";
-                                    }
+                                if ($record->has_original && !$record->stream_ready && !in_array($record->processing_state, [Video::PROCESSING_QUEUED, Video::PROCESSING_RUNNING])) {
+                                    $record->update([
+                                        'processing_state' => Video::PROCESSING_QUEUED,
+                                        'processing_error' => null,
+                                    ]);
+                                    PrepareStreamMp4Job::dispatch($record);
+                                    $queued++;
                                 } else {
                                     $skipped++;
                                 }
                             }
                             
-                            $message = "Queued: {$queued}, Skipped: {$skipped}";
-                            if (!empty($errors)) {
-                                $message .= "\nErrors: " . implode('; ', array_slice($errors, 0, 3));
-                            }
-                            
                             \Filament\Notifications\Notification::make()
-                                ->title('HLS Generation Queued')
-                                ->body($message)
+                                ->title('Stream Preparation Queued')
+                                ->body("Queued: {$queued}, Skipped: {$skipped}")
                                 ->success()
                                 ->send();
                         })
@@ -603,7 +566,7 @@ class VideoResource extends Resource
                 ]),
             ])
             ->defaultSort('created_at', 'desc')
-            ->poll('3s'); // Poll more frequently for better UX
+            ->poll('3s');
     }
 
     public static function getRelations(): array

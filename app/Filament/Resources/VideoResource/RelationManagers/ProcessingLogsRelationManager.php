@@ -12,7 +12,7 @@ class ProcessingLogsRelationManager extends RelationManager
 {
     protected static string $relationship = 'processingLogs';
 
-    protected static ?string $title = 'HLS Processing Logs';
+    protected static ?string $title = 'Video Processing Logs';
 
     protected static ?string $recordTitleAttribute = 'message';
 
@@ -26,22 +26,33 @@ class ProcessingLogsRelationManager extends RelationManager
                     ->dateTime('M d, H:i:s')
                     ->sortable()
                     ->description(fn ($record) => $record->created_at?->diffForHumans()),
-                Tables\Columns\BadgeColumn::make('level')
+                Tables\Columns\BadgeColumn::make('status')
                     ->colors([
                         'info' => 'info',
                         'warning' => 'warning',
                         'error' => 'danger',
+                        'success' => 'completed',
+                        'primary' => 'processing',
                     ]),
+                Tables\Columns\TextColumn::make('job_type')
+                    ->label('Job')
+                    ->badge()
+                    ->color('gray'),
                 Tables\Columns\TextColumn::make('message')
                     ->wrap()
                     ->limit(80)
                     ->tooltip(fn ($record) => $record->message),
-                Tables\Columns\TextColumn::make('context')
+                Tables\Columns\TextColumn::make('progress')
+                    ->label('Progress')
+                    ->formatStateUsing(fn ($state) => $state !== null ? "{$state}%" : '-')
+                    ->badge()
+                    ->color(fn ($state) => $state !== null ? ($state >= 100 ? 'success' : 'warning') : 'gray'),
+                Tables\Columns\TextColumn::make('metadata')
                     ->label('Details')
                     ->formatStateUsing(function ($state) {
                         if (empty($state)) return '-';
                         if (is_array($state)) {
-                            // Show key info from context
+                            // Show key info from metadata
                             $parts = [];
                             if (isset($state['progress'])) {
                                 $parts[] = "Progress: {$state['progress']}%";
@@ -61,6 +72,9 @@ class ProcessingLogsRelationManager extends RelationManager
                             if (isset($state['rendition'])) {
                                 $parts[] = "Rendition: {$state['rendition']}";
                             }
+                            if (isset($state['quality'])) {
+                                $parts[] = "Quality: {$state['quality']}";
+                            }
                             return implode(' | ', $parts) ?: json_encode($state);
                         }
                         return $state;
@@ -69,11 +83,19 @@ class ProcessingLogsRelationManager extends RelationManager
                     ->toggleable(),
             ])
             ->filters([
-                Tables\Filters\SelectFilter::make('level')
+                Tables\Filters\SelectFilter::make('status')
                     ->options([
                         'info' => 'Info',
                         'warning' => 'Warning',
                         'error' => 'Error',
+                        'processing' => 'Processing',
+                        'completed' => 'Completed',
+                    ]),
+                Tables\Filters\SelectFilter::make('job_type')
+                    ->options([
+                        'prepare_stream' => 'Prepare Stream',
+                        'build_renditions' => 'Build Renditions',
+                        'hls' => 'HLS (legacy)',
                     ]),
             ])
             ->actions([
@@ -83,13 +105,18 @@ class ProcessingLogsRelationManager extends RelationManager
                         Forms\Components\TextInput::make('created_at')
                             ->label('Time')
                             ->disabled(),
-                        Forms\Components\TextInput::make('level')
+                        Forms\Components\TextInput::make('status')
+                            ->disabled(),
+                        Forms\Components\TextInput::make('job_type')
+                            ->label('Job Type')
+                            ->disabled(),
+                        Forms\Components\TextInput::make('progress')
                             ->disabled(),
                         Forms\Components\Textarea::make('message')
                             ->disabled()
                             ->rows(2),
-                        Forms\Components\Textarea::make('context')
-                            ->label('Full Context (JSON)')
+                        Forms\Components\Textarea::make('metadata')
+                            ->label('Full Metadata (JSON)')
                             ->disabled()
                             ->rows(10)
                             ->formatStateUsing(fn ($state) => is_array($state) ? json_encode($state, JSON_PRETTY_PRINT) : $state),
@@ -101,7 +128,7 @@ class ProcessingLogsRelationManager extends RelationManager
                 ]),
             ])
             ->defaultSort('created_at', 'desc')
-            ->poll('2s')  // Poll every 2 seconds for realtime updates during processing
+            ->poll('2s')
             ->paginated([10, 25, 50, 100])
             ->defaultPaginationPageOption(25);
     }

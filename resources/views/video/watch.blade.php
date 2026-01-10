@@ -31,15 +31,16 @@
                 </div>
                 @endif
 
-                {{-- HLS Upgrade Indicator --}}
-                <div x-show="isUsingHls" x-cloak class="bg-green-500/10 border border-green-500/30 rounded-xl p-2 mb-4">
+                @if(($isOwner || $isAdmin) && !$video->stream_ready && $video->processing_state === 'processing')
+                <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4">
                     <div class="flex items-center gap-2">
-                        <svg class="w-4 h-4 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        <svg class="w-4 h-4 text-yellow-400 animate-pulse flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                         </svg>
-                        <p class="text-green-400 text-xs">Adaptive streaming active • Quality adjusts to your connection</p>
+                        <p class="text-yellow-400 text-sm">Preparing fast-start stream... Playback will improve shortly.</p>
                     </div>
                 </div>
+                @endif
 
                 <!-- Video Player -->
                 <div class="relative aspect-video bg-black rounded-lg sm:rounded-xl overflow-hidden mb-4" id="video-player-container">
@@ -55,10 +56,48 @@
                             controlslist="nodownload noremoteplayback"
                             disablepictureinpicture
                             oncontextmenu="return false;"
+                            @loadedmetadata="onVideoLoaded"
+                            @waiting="onBuffering"
+                            @playing="onPlaying"
                         >
-                            <source src="{{ $video->stream_url }}" type="video/mp4">
+                            <source :src="currentVideoSrc" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
+
+                        <!-- Quality Selector Overlay -->
+                        @if($video->hasRenditions() || $video->stream_ready)
+                        <div class="absolute bottom-16 right-4 z-10" x-show="showQualityMenu" @click.away="showQualityMenu = false" x-cloak>
+                            <div class="bg-black/90 backdrop-blur-sm rounded-lg shadow-lg overflow-hidden min-w-[120px]">
+                                <div class="py-1">
+                                    <button 
+                                        @click="setQuality('auto')"
+                                        class="w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors"
+                                        :class="selectedQuality === 'auto' ? 'text-blue-400 font-medium' : 'text-white'"
+                                    >
+                                        Auto {{ selectedQuality === 'auto' ? '(' + currentAutoQuality + 'p)' : '' }}
+                                    </button>
+                                    @foreach($video->available_qualities ?? [] as $quality => $info)
+                                    <button 
+                                        @click="setQuality('{{ $quality }}')"
+                                        class="w-full px-4 py-2 text-left text-sm hover:bg-white/10 transition-colors"
+                                        :class="selectedQuality === '{{ $quality }}' ? 'text-blue-400 font-medium' : 'text-white'"
+                                    >
+                                        {{ $quality }}p
+                                    </button>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Quality Button -->
+                        <button 
+                            @click="showQualityMenu = !showQualityMenu"
+                            class="absolute bottom-4 right-4 z-10 bg-black/70 hover:bg-black/90 text-white px-3 py-1.5 rounded-lg text-sm font-medium backdrop-blur-sm transition-all"
+                            title="Change quality"
+                        >
+                            <span x-text="selectedQuality === 'auto' ? 'Auto (' + currentAutoQuality + 'p)' : selectedQuality + 'p'"></span>
+                        </button>
+                        @endif
                     @else
                         <div class="w-full h-full flex items-center justify-center bg-gray-900">
                             <div class="text-center">
@@ -329,8 +368,6 @@
     </div>
 
     @push('scripts')
-    {{-- Include HLS.js for HLS playback --}}
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     <script>
         function videoPage() {
             return {
@@ -352,113 +389,180 @@
                 commentError: '',
                 commentsCount: {{ $video->comments_count ?? 0 }},
                 
-                // HLS state
-                hlsPlayer: null,
-                hlsReady: false,
-                hlsUrl: null,
-                mp4Url: '{{ $video->stream_url }}',
-                isUsingHls: false,
-                hlsPollInterval: null,
+                // Quality selector state
+                showQualityMenu: false,
+                selectedQuality: null,
+                currentAutoQuality: '720',
+                currentVideoSrc: '{{ route('video.stream', $video) }}',
+                availableQualities: @json($video->available_qualities ?? []),
+                bufferingCount: 0,
+                lastBufferTime: null,
                 
                 init() {
+                    this.initQualitySelector();
                     this.initVideoPlayer();
                     this.initViewTracking();
-                    this.initHlsPolling();
+                },
+                
+                initQualitySelector() {
+                    // Load saved quality preference
+                    const saved = localStorage.getItem('playtube_quality');
+                    
+                    // Determine default quality based on device
+                    const defaultQuality = this.getDefaultQuality();
+                    
+                    this.selectedQuality = saved || 'auto';
+                    
+                    if (this.selectedQuality === 'auto') {
+                        this.currentAutoQuality = defaultQuality;
+                        this.setAutoQuality(defaultQuality);
+                    } else {
+                        this.currentVideoSrc = this.getQualityUrl(this.selectedQuality);
+                    }
+                },
+                
+                getDefaultQuality() {
+                    const width = window.innerWidth;
+                    
+                    // Mobile: prefer 360p or 480p
+                    if (width <= 420) return '360';
+                    if (width <= 820) {
+                        return this.availableQualities['480'] ? '480' : '720';
+                    }
+                    
+                    // Desktop: prefer 720p
+                    return this.availableQualities['720'] ? '720' : 
+                           (this.availableQualities['480'] ? '480' : '360');
+                },
+                
+                getQualityUrl(quality) {
+                    if (quality === 'auto') {
+                        return '{{ route('video.stream', $video) }}';
+                    }
+                    
+                    if (this.availableQualities[quality]) {
+                        return this.availableQualities[quality].url;
+                    }
+                    
+                    return '{{ route('video.stream', $video) }}';
+                },
+                
+                setQuality(quality) {
+                    if (quality === this.selectedQuality) {
+                        this.showQualityMenu = false;
+                        return;
+                    }
+                    
+                    const video = document.getElementById('video-player');
+                    if (!video) return;
+                    
+                    // Save state
+                    const currentTime = video.currentTime || 0;
+                    const wasPaused = video.paused;
+                    
+                    // Update quality
+                    this.selectedQuality = quality;
+                    localStorage.setItem('playtube_quality', quality);
+                    
+                    if (quality === 'auto') {
+                        const autoQuality = this.getDefaultQuality();
+                        this.currentAutoQuality = autoQuality;
+                        this.currentVideoSrc = this.getQualityUrl(autoQuality);
+                    } else {
+                        this.currentVideoSrc = this.getQualityUrl(quality);
+                    }
+                    
+                    // Wait for next tick to ensure Alpine updates the source
+                    this.$nextTick(() => {
+                        video.load();
+                        
+                        video.addEventListener('loadedmetadata', function onMeta() {
+                            video.removeEventListener('loadedmetadata', onMeta);
+                            try {
+                                video.currentTime = Math.min(currentTime, video.duration - 0.5);
+                            } catch(e) {}
+                            
+                            if (!wasPaused) {
+                                video.play().catch(() => {});
+                            }
+                        });
+                    });
+                    
+                    this.showQualityMenu = false;
+                },
+                
+                setAutoQuality(quality) {
+                    this.currentAutoQuality = quality;
+                    this.currentVideoSrc = this.getQualityUrl(quality);
+                },
+                
+                onBuffering() {
+                    const now = Date.now();
+                    
+                    // Track buffering events
+                    if (!this.lastBufferTime || (now - this.lastBufferTime) > 3000) {
+                        this.bufferingCount++;
+                        this.lastBufferTime = now;
+                        
+                        // Auto-downshift if too many stalls in Auto mode
+                        if (this.selectedQuality === 'auto' && this.bufferingCount >= 3) {
+                            this.autoDownshift();
+                        }
+                    }
+                },
+                
+                autoDownshift() {
+                    const qualityLadder = ['1080', '720', '480', '360'];
+                    const currentIdx = qualityLadder.indexOf(this.currentAutoQuality);
+                    
+                    if (currentIdx < qualityLadder.length - 1) {
+                        const nextQuality = qualityLadder[currentIdx + 1];
+                        
+                        if (this.availableQualities[nextQuality]) {
+                            console.log(`Auto-downshifting from ${this.currentAutoQuality}p to ${nextQuality}p due to buffering`);
+                            this.setAutoQuality(nextQuality);
+                            this.bufferingCount = 0;
+                            
+                            const video = document.getElementById('video-player');
+                            if (video) {
+                                const currentTime = video.currentTime;
+                                video.load();
+                                video.addEventListener('loadedmetadata', function onMeta() {
+                                    video.removeEventListener('loadedmetadata', onMeta);
+                                    try {
+                                        video.currentTime = currentTime;
+                                    } catch(e) {}
+                                    video.play().catch(() => {});
+                                });
+                            }
+                        }
+                    }
+                },
+                
+                onPlaying() {
+                    // Reset buffering count on successful playback
+                    if (this.bufferingCount > 0) {
+                        setTimeout(() => {
+                            this.bufferingCount = 0;
+                        }, 10000);
+                    }
+                },
+                
+                onVideoLoaded() {
+                    const video = document.getElementById('video-player');
+                    if (video) {
+                        console.log('Video loaded: duration =', video.duration);
+                    }
                 },
                 
                 initVideoPlayer() {
                     const video = document.getElementById('video-player');
                     if (!video) return;
                     
-                    video.addEventListener('loadedmetadata', () => {
-                        console.log('Video ready: duration =', video.duration);
-                    });
-                    
                     video.addEventListener('error', (e) => {
                         console.error('Video error:', e);
                     });
                 },
-                
-                // Poll for HLS availability and seamlessly upgrade from MP4
-                async initHlsPolling() {
-                    // Check if HLS is already ready
-                    const status = await this.checkPlaybackStatus();
-                    if (status && status.hls_ready && status.hls_url) {
-                        this.hlsReady = true;
-                        this.hlsUrl = status.hls_url;
-                        this.upgradeToHls();
-                        return;
-                    }
-                    
-                    // If HLS processing is in progress, poll for completion
-                    if (status && status.hls_enabled && status.processing_state !== 'ready') {
-                        this.hlsPollInterval = setInterval(async () => {
-                            const newStatus = await this.checkPlaybackStatus();
-                            if (newStatus && newStatus.hls_ready && newStatus.hls_url) {
-                                clearInterval(this.hlsPollInterval);
-                                this.hlsReady = true;
-                                this.hlsUrl = newStatus.hls_url;
-                                this.upgradeToHls();
-                            }
-                        }, 5000); // Poll every 5 seconds
-                    }
-                },
-                
-                async checkPlaybackStatus() {
-                    try {
-                        const response = await fetch('/api/v1/videos/{{ $video->id }}/playback-status');
-                        return await response.json();
-                    } catch (e) {
-                        console.log('Failed to check playback status:', e);
-                        return null;
-                    }
-                },
-                
-                upgradeToHls() {
-                    if (this.isUsingHls || !this.hlsUrl) return;
-                    
-                    const video = document.getElementById('video-player');
-                    if (!video) return;
-                    
-                    // Store current playback position and state
-                    const wasPlaying = !video.paused;
-                    const currentTime = video.currentTime;
-                    const currentVolume = video.volume;
-                    const wasMuted = video.muted;
-                    
-                    // Check if HLS.js is supported
-                    if (Hls.isSupported()) {
-                        // Destroy existing HLS instance if any
-                        if (this.hlsPlayer) {
-                            this.hlsPlayer.destroy();
-                        }
-                        
-                        this.hlsPlayer = new Hls({
-                            enableWorker: true,
-                            lowLatencyMode: false,
-                            maxBufferLength: 30,
-                            maxMaxBufferLength: 60,
-                            startLevel: -1, // Auto quality selection
-                        });
-                        
-                        this.hlsPlayer.loadSource(this.hlsUrl);
-                        this.hlsPlayer.attachMedia(video);
-                        
-                        this.hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                            console.log('HLS manifest loaded, switching to adaptive streaming');
-                            this.isUsingHls = true;
-                            
-                            // Restore playback state
-                            video.currentTime = currentTime;
-                            video.volume = currentVolume;
-                            video.muted = wasMuted;
-                            
-                            if (wasPlaying) {
-                                video.play().catch(() => {});
-                            }
-                        });
-                        
-                        this.hlsPlayer.on(Hls.Events.ERROR, (event, data) => {
                             console.warn('HLS error:', data.type, data.details);
                             if (data.fatal) {
                                 // Fall back to MP4 on fatal HLS error

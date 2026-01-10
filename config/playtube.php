@@ -34,15 +34,25 @@ return [
     */
 
     'processing' => [
-        // Whether to generate HLS streams (requires ffmpeg)
-        'generate_hls' => env('VIDEO_GENERATE_HLS', false),
-        
-        // Whether to auto-generate thumbnails (requires ffmpeg)
+        // Whether to generate thumbnails (requires ffmpeg)
         'generate_thumbnail' => env('VIDEO_GENERATE_THUMBNAIL', true),
         
         // Default thumbnail if auto-generation fails
         'default_thumbnail' => '/images/default-thumbnail.jpg',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Video Delivery
+    |--------------------------------------------------------------------------
+    |
+    | Driver for video delivery:
+    | - 'php': Stream through PHP (development, lower performance)
+    | - 'nginx': Use X-Accel-Redirect (production, optimal performance)
+    |
+    */
+
+    'video_delivery_driver' => env('VIDEO_DELIVERY_DRIVER', 'php'),
 
     /*
     |--------------------------------------------------------------------------

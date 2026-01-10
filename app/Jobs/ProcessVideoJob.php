@@ -120,8 +120,8 @@ class ProcessVideoJob implements ShouldQueue
                 'thumbnail' => $thumbnailPath,
             ]);
 
-            // Optionally dispatch HLS transcoding based on settings
-            $this->maybeDispatchHlsTranscoding();
+            // Dispatch stream MP4 preparation for fast playback
+            dispatch(new PrepareStreamMp4Job($this->video))->onQueue('high');
 
         } catch (\Exception $e) {
             Log::error("Video processing failed (video still playable via MP4)", [
@@ -257,51 +257,5 @@ class ProcessVideoJob implements ShouldQueue
             'processing_error' => $exception->getMessage(),
             'processed_at' => now(),
         ]);
-    }
-
-    /**
-     * Optionally dispatch HLS transcoding based on global settings and video settings.
-     */
-    protected function maybeDispatchHlsTranscoding(): void
-    {
-        // Check if HLS processing is enabled globally
-        $hlsEnabled = Setting::get('enable_hls_processing', true);
-        $autoGenerateHls = Setting::get('auto_generate_hls', true);
-
-        if (!$hlsEnabled || !$autoGenerateHls) {
-            Log::info("HLS auto-generation disabled", [
-                'video_id' => $this->video->id,
-                'enable_hls_processing' => $hlsEnabled,
-                'auto_generate_hls' => $autoGenerateHls,
-            ]);
-            return;
-        }
-
-        // Check if video has HLS enabled
-        if (!$this->video->hls_enabled) {
-            Log::info("HLS not enabled for this video", ['video_id' => $this->video->id]);
-            return;
-        }
-
-        // Check if HLS is already ready
-        if ($this->video->processing_state === Video::PROCESSING_READY && $this->video->hls_master_path) {
-            Log::info("HLS already ready for this video", ['video_id' => $this->video->id]);
-            return;
-        }
-
-        // Check if original file exists
-        if (!$this->video->has_original) {
-            Log::warning("Cannot dispatch HLS transcoding - no original file", ['video_id' => $this->video->id]);
-            return;
-        }
-
-        Log::info("Dispatching HLS transcoding job", ['video_id' => $this->video->id]);
-
-        // Update state to indicate HLS is pending
-        $this->video->update([
-            'processing_state' => Video::PROCESSING_PENDING,
-        ]);
-
-        TranscodeToHlsJob::dispatch($this->video);
     }
 }

@@ -12,6 +12,8 @@ class VideoStreamController extends Controller
 {
     /**
      * Stream video with HTTP Range support for smooth seeking/playback
+     * Supports quality parameter for multi-quality playback
+     * Uses X-Accel-Redirect in production (nginx) for optimal performance
      */
     public function stream(Request $request, Video $video)
     {
@@ -20,19 +22,84 @@ class VideoStreamController extends Controller
             abort(404);
         }
 
-        if (!$video->original_path) {
+        // Determine which file to serve
+        $quality = $request->get('quality');
+        $filePath = $this->resolveFilePath($video, $quality);
+
+        if (!$filePath) {
             abort(404, 'Video file not found');
         }
 
         $disk = Storage::disk('public');
         
-        if (!$disk->exists($video->original_path)) {
+        if (!$disk->exists($filePath)) {
             abort(404, 'Video file not found');
         }
 
-        $path = $disk->path($video->original_path);
-        $size = filesize($path);
-        $mimeType = $this->getMimeType($path);
+        $mimeType = $this->getMimeType($filePath);
+
+        // Production: Use Nginx X-Accel-Redirect for optimal performance
+        if ($this->shouldUseXAccelRedirect()) {
+            return $this->streamViaXAccel($filePath, $mimeType);
+        }
+
+        // Development fallback: PHP streaming with Range support
+        return $this->streamViaPhp($disk->path($filePath), $request, $mimeType);
+    }
+
+    /**
+     * Resolve which file to serve based on quality parameter
+     */
+    protected function resolveFilePath(Video $video, ?string $quality): ?string
+    {
+        // If quality is specified and rendition exists
+        if ($quality && $video->renditions && isset($video->renditions[$quality])) {
+            $rendition = $video->renditions[$quality];
+            if (isset($rendition['path'])) {
+                return $rendition['path'];
+            }
+        }
+
+        // Default: use stream_path if ready, otherwise original
+        if ($video->stream_ready && $video->stream_path) {
+            return $video->stream_path;
+        }
+
+        return $video->original_path;
+    }
+
+    /**
+     * Check if we should use X-Accel-Redirect (production)
+     */
+    protected function shouldUseXAccelRedirect(): bool
+    {
+        return config('playtube.video_delivery_driver') === 'nginx' 
+            || config('app.env') === 'production';
+    }
+
+    /**
+     * Stream via Nginx X-Accel-Redirect (production)
+     */
+    protected function streamViaXAccel(string $relativePath, string $mimeType): Response
+    {
+        // Nginx internal location: /_protected_storage/ -> storage/app/public/
+        $internalPath = '/_protected_storage/' . ltrim($relativePath, '/');
+
+        return response('', 200, [
+            'Content-Type' => $mimeType,
+            'X-Accel-Redirect' => $internalPath,
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+            'Content-Disposition' => 'inline',
+        ]);
+    }
+
+    /**
+     * Stream via PHP with Range support (development fallback)
+     */
+    protected function streamViaPhp(string $fullPath, Request $request, string $mimeType): StreamedResponse
+    {
+        $size = filesize($fullPath);
         
         // Default: serve entire file
         $start = 0;
@@ -61,8 +128,8 @@ class VideoStreamController extends Controller
         }
 
         // Stream the video
-        $response = new StreamedResponse(function () use ($path, $start, $length) {
-            $handle = fopen($path, 'rb');
+        $response = new StreamedResponse(function () use ($fullPath, $start, $length) {
+            $handle = fopen($fullPath, 'rb');
             fseek($handle, $start);
             
             $bufferSize = 1024 * 1024; // 1MB chunks
@@ -96,72 +163,6 @@ class VideoStreamController extends Controller
         }
 
         return $response;
-    }
-
-    /**
-     * Stream HLS playlist or segment
-     * Supports nested paths like v720/index.m3u8, v720/seg_00001.ts
-     */
-    public function streamHls(Request $request, Video $video, string $path)
-    {
-        // Check if video can be viewed
-        if (!$video->canBeViewedBy(auth()->user())) {
-            abort(404);
-        }
-
-        // Sanitize path to prevent directory traversal attacks
-        // Only allow alphanumeric, underscores, hyphens, dots, and forward slashes
-        if (!preg_match('/^[\w\-\.\/]+$/', $path)) {
-            abort(400, 'Invalid path');
-        }
-
-        // Normalize the path and ensure no traversal
-        $normalizedPath = preg_replace('#/+#', '/', $path);
-        $parts = explode('/', $normalizedPath);
-        $safeParts = [];
-        
-        foreach ($parts as $part) {
-            if ($part === '..' || $part === '.' || $part === '') {
-                continue;
-            }
-            // Additional safety: each segment must be a valid filename
-            if (!preg_match('/^[\w\-\.]+$/', $part)) {
-                abort(400, 'Invalid path segment');
-            }
-            $safeParts[] = $part;
-        }
-        
-        if (empty($safeParts)) {
-            abort(400, 'Invalid path');
-        }
-        
-        $safePath = implode('/', $safeParts);
-        $hlsDir = "videos/{$video->uuid}/hls";
-        $fullRelativePath = "{$hlsDir}/{$safePath}";
-
-        $disk = Storage::disk('public');
-        
-        if (!$disk->exists($fullRelativePath)) {
-            abort(404, 'HLS file not found');
-        }
-
-        $fullPath = $disk->path($fullRelativePath);
-        $content = file_get_contents($fullPath);
-        
-        // Determine content type based on file extension
-        $extension = pathinfo($safePath, PATHINFO_EXTENSION);
-        $contentType = match($extension) {
-            'm3u8' => 'application/vnd.apple.mpegurl',
-            'ts' => 'video/mp2t',
-            default => 'application/octet-stream',
-        };
-
-        return response($content, 200, [
-            'Content-Type' => $contentType,
-            'Content-Length' => strlen($content),
-            'Cache-Control' => 'public, max-age=31536000',
-            'Access-Control-Allow-Origin' => '*',
-        ]);
     }
 
     /**
