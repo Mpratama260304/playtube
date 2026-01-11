@@ -363,7 +363,8 @@
                         <input type="text" 
                                x-model="newComment"
                                placeholder="Add a comment..." 
-                               class="flex-1 bg-white border-0 rounded-full px-4 py-2 text-sm text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                               style="background-color: #374151; color: #ffffff;"
+                               class="flex-1 border-0 rounded-full px-4 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <button type="submit"
                                 :disabled="!newComment.trim() || posting"
                                 class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
@@ -707,20 +708,20 @@
                 loaded: false,
                 
                 async loadComments() {
-                    // Get current active video ID
+                    // Get current active video slug
                     const activeIndex = Alpine.store('shorts').activeIndex;
                     const activeSlide = document.querySelector(`[data-short-index="${activeIndex}"]`);
                     if (!activeSlide) return;
                     
-                    const videoId = activeSlide.dataset.shortId;
-                    if (!videoId) return;
+                    const videoSlug = activeSlide.dataset.shortSlug;
+                    if (!videoSlug) return;
                     
                     // Reset and load
                     this.loading = true;
                     this.comments = [];
                     
                     try {
-                        const response = await fetch(`/video/${videoId}/comments`, {
+                        const response = await fetch(`/video/${videoSlug}/comments`, {
                             headers: { 'Accept': 'application/json' }
                         });
                         
@@ -744,13 +745,13 @@
                     const activeSlide = document.querySelector(`[data-short-index="${activeIndex}"]`);
                     if (!activeSlide) return;
                     
-                    const videoId = activeSlide.dataset.shortId;
-                    if (!videoId) return;
+                    const videoSlug = activeSlide.dataset.shortSlug;
+                    if (!videoSlug) return;
                     
                     this.posting = true;
                     
                     try {
-                        const response = await fetch(`/video/${videoId}/comment`, {
+                        const response = await fetch(`/video/${videoSlug}/comment`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
