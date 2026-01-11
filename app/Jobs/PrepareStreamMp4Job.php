@@ -80,12 +80,31 @@ class PrepareStreamMp4Job implements ShouldQueue
             // Execute ffmpeg with progress tracking
             $this->executeFfmpeg($command, $log, $probeData['duration'] ?? 0);
 
-            // Verify output exists
+            // Verify output exists and is valid
             if (!file_exists($outputPath)) {
                 throw new \Exception('Output file was not created');
             }
 
             $outputSize = filesize($outputPath);
+            
+            // Validate minimum file size (must be at least 1MB for a real video)
+            if ($outputSize < 1024 * 1024) {
+                unlink($outputPath); // Remove corrupt file
+                throw new \Exception("Output file too small ({$outputSize} bytes), likely corrupt");
+            }
+            
+            // Validate the output file with ffprobe
+            $validateCmd = sprintf(
+                'ffprobe -v error -show_format %s 2>&1',
+                escapeshellarg($outputPath)
+            );
+            $validateOutput = shell_exec($validateCmd);
+            
+            if (empty($validateOutput) || strpos($validateOutput, '[FORMAT]') === false) {
+                unlink($outputPath); // Remove corrupt file
+                throw new \Exception('Output file failed validation - invalid video format');
+            }
+            
             $log->updateProgress(95, 'Verifying output file');
 
             // Update video record

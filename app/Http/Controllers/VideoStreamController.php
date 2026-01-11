@@ -56,23 +56,62 @@ class VideoStreamController extends Controller
 
     /**
      * Resolve which file to serve based on quality parameter
+     * 
+     * Priority:
+     * 1. Specific quality rendition (if requested and exists)
+     * 2. stream.mp4 (faststart optimized) - if exists and valid
+     * 3. original.mp4 - fallback
+     * 
+     * Always validates file existence and basic integrity.
      */
     protected function resolveFilePath(Video $video, ?string $quality): ?string
     {
+        $disk = Storage::disk('public');
+        
         // If quality is specified (e.g., ?quality=360 or ?quality=720)
         if ($quality && $video->renditions && isset($video->renditions[$quality])) {
             $rendition = $video->renditions[$quality];
-            if (isset($rendition['path'])) {
-                return $rendition['path'];
+            if (isset($rendition['path']) && $disk->exists($rendition['path'])) {
+                // Validate minimum file size (1MB)
+                if ($disk->size($rendition['path']) > 1024 * 1024) {
+                    return $rendition['path'];
+                }
             }
         }
 
-        // Default priority: stream_path (faststart) > original_path
-        if ($video->stream_ready && $video->stream_path) {
-            return $video->stream_path;
+        // Try stream_path first (faststart optimized for streaming)
+        if ($video->stream_ready && $video->stream_path && $disk->exists($video->stream_path)) {
+            // Validate file size - must be at least 1MB for a valid video
+            if ($disk->size($video->stream_path) > 1024 * 1024) {
+                return $video->stream_path;
+            }
+            // If stream.mp4 exists but is too small, it's probably corrupt
+            \Log::warning("stream.mp4 appears corrupt (too small)", [
+                'video_id' => $video->id,
+                'stream_path' => $video->stream_path,
+                'size' => $disk->size($video->stream_path),
+            ]);
         }
 
-        return $video->original_path;
+        // Fallback to original.mp4
+        if ($video->original_path && $disk->exists($video->original_path)) {
+            return $video->original_path;
+        }
+
+        // Last resort: try to find any video file in the UUID directory
+        $uuid = $video->uuid;
+        $possiblePaths = [
+            "videos/{$uuid}/stream.mp4",
+            "videos/{$uuid}/original.mp4",
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if ($disk->exists($path) && $disk->size($path) > 1024 * 1024) {
+                return $path;
+            }
+        }
+
+        return null;
     }
 
     /**
