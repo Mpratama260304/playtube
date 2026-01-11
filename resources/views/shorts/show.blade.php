@@ -19,28 +19,51 @@
         .pt-safe { padding-top: env(safe-area-inset-top); }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         
-        /* Hide scrollbar but allow scroll */
-        .shorts-scroll-container {
+        /* Reset */
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        /* Main scroll container - THE KEY ELEMENT */
+        .shorts-feed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: scroll;
+            overflow-x: hidden;
+            scroll-snap-type: y mandatory;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            /* Hide scrollbar */
             scrollbar-width: none;
             -ms-overflow-style: none;
         }
-        .shorts-scroll-container::-webkit-scrollbar {
-            display: none;
-        }
+        .shorts-feed::-webkit-scrollbar { display: none; }
         
-        /* Scroll snap for smooth snapping */
-        .shorts-scroll-container {
-            scroll-snap-type: y mandatory;
-            overscroll-behavior-y: contain;
-        }
-        
+        /* Each slide - MUST have fixed height */
         .shorts-slide {
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             scroll-snap-align: start;
             scroll-snap-stop: always;
+            flex-shrink: 0;
         }
         
         /* Video stage sizing */
         .shorts-stage {
+            position: relative;
             width: min(420px, calc((100dvh - 56px) * 9 / 16), 100vw);
             max-height: calc(100dvh - 56px);
             aspect-ratio: 9 / 16;
@@ -55,11 +78,11 @@
         }
     </style>
 </head>
-<body class="bg-black text-white overflow-hidden" x-data="shortsApp()" x-init="init()">
+<body class="bg-black text-white" x-data="shortsApp()" x-init="init()">
     
-    <!-- Fixed Header -->
-    <header class="fixed inset-x-0 top-0 z-50 h-14 bg-gradient-to-b from-black/80 to-transparent pt-safe">
-        <div class="w-full h-full flex items-center justify-between px-4">
+    <!-- Fixed Header - pointer-events-none allows scroll through -->
+    <header class="fixed inset-x-0 top-0 z-50 h-14 bg-gradient-to-b from-black/80 to-transparent pt-safe" style="pointer-events: none;">
+        <div class="w-full h-full flex items-center justify-between px-4" style="pointer-events: auto;">
             <!-- Close button -->
             <a href="{{ route('shorts.index') }}" 
                class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors"
@@ -87,15 +110,13 @@
         </div>
     </header>
 
-    <!-- Scrollable Shorts Container -->
-    <main class="fixed inset-0 bg-black shorts-scroll-container overflow-y-scroll"
-          @scroll.debounce.50ms="onScroll($event)"
+    <!-- Scrollable Shorts Container - MAIN SCROLL AREA -->
+    <main class="shorts-feed"
+          @scroll="onScroll($event)"
           x-ref="scrollContainer">
         
-        <!-- Shorts Feed -->
-        <div class="flex flex-col items-center">
             @foreach($allShorts as $index => $short)
-            <div class="shorts-slide h-[100dvh] w-full flex items-center justify-center relative"
+            <div class="shorts-slide"
                  data-short-index="{{ $index }}"
                  data-short-id="{{ $short->id }}"
                  data-short-slug="{{ $short->slug }}">
@@ -288,18 +309,12 @@
             @endforeach
             
             <!-- Loading more indicator -->
-            <div x-show="loadingMore" x-cloak class="h-20 flex items-center justify-center">
+            <div x-show="loadingMore" x-cloak class="shorts-slide">
                 <svg class="animate-spin h-8 w-8 text-white" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
             </div>
-            
-            <!-- End of feed -->
-            <div x-show="!hasMore && !loadingMore" x-cloak class="h-20 flex items-center justify-center">
-                <p class="text-white/50 text-sm">No more shorts</p>
-            </div>
-        </div>
     </main>
 
     <!-- Comments Modal -->
