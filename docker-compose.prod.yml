@@ -1,7 +1,7 @@
 # ============================================
 # PlayTube Production Docker Compose
 # Optimized for video streaming performance
-# Updated: Shorts scroll feature support
+# Updated: Phala Cloud deployment fixes
 # NOTE: App image bundles nginx + php-fpm via supervisord
 # ============================================
 
@@ -13,18 +13,38 @@ services:
     image: ${DOCKER_IMAGE:-mpratamamail/playtube:latest}
     container_name: playtube-app
     restart: unless-stopped
+    # IMPORTANT: Literal port for Phala Cloud endpoint detection
+    # Phala creates public URL: https://<app-id>-8080.dstack-prod5.phala.network
     ports:
-      - "${APP_PORT:-8080}:80"
+      - "8080:80"
+    # Override command to ensure nginx listens on 0.0.0.0:80 (not 127.0.0.1)
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "==> Patching nginx to listen on all interfaces..."
+        for conf in /etc/nginx/http.d/*.conf /etc/nginx/conf.d/*.conf /etc/nginx/nginx.conf; do
+          if [ -f "$$conf" ]; then
+            sed -i 's/listen 127\.0\.0\.1:80/listen 80/g' "$$conf" 2>/dev/null || true
+            sed -i 's/listen localhost:80/listen 80/g' "$$conf" 2>/dev/null || true
+          fi
+        done
+        echo "==> Starting application..."
+        exec /usr/local/bin/start.sh
     environment:
       - APP_NAME=${APP_NAME:-PlayTube}
       - APP_ENV=production
       - APP_KEY=${APP_KEY}
       - APP_DEBUG=false
-      - APP_URL=${APP_URL}
+      # APP_URL: Set to actual Phala endpoint after deployment
+      # e.g., https://<app-id>-8080.dstack-prod5.phala.network
+      - APP_URL=${APP_URL:-http://localhost}
       
       # Proxy & HTTPS (for Phala Cloud / reverse proxy)
+      # Phala gateway handles TLS, app trusts X-Forwarded-* headers
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-*}
-      - FORCE_HTTPS=${FORCE_HTTPS:-true}
+      # Disable forced HTTPS until endpoint is confirmed working
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
       
       # Database (force mysql, not sqlite)
       - DB_CONNECTION=mysql
@@ -39,7 +59,7 @@ services:
       - CACHE_DRIVER=redis
       - CACHE_STORE=redis
       - SESSION_DRIVER=redis
-      - SESSION_SECURE_COOKIE=${SESSION_SECURE_COOKIE:-true}
+      - SESSION_SECURE_COOKIE=${SESSION_SECURE_COOKIE:-false}
       - REDIS_CLIENT=phpredis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
@@ -64,8 +84,8 @@ services:
     networks:
       - playtube-network
     healthcheck:
-      # HTTP healthcheck using curl (installed in image)
-      test: ["CMD-SHELL", "curl -fsS http://localhost/health >/dev/null || exit 1"]
+      # HTTP healthcheck - verifies nginx is accepting connections
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:80/health >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       start_period: 120s
