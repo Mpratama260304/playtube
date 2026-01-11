@@ -430,12 +430,29 @@
         // Navigation loading bar
         const loadingBar = document.getElementById('nav-loading-bar');
         
+        // Global video cleanup function - stops video streaming immediately
+        window.stopVideoStream = function() {
+            const video = document.getElementById('video-player');
+            if (video) {
+                try {
+                    video.pause();
+                    video.removeAttribute('src');
+                    video.load(); // Aborts pending network requests
+                    const sources = video.querySelectorAll('source');
+                    sources.forEach(s => s.remove());
+                } catch (e) {}
+            }
+        };
+        
         document.addEventListener('click', function(e) {
             const link = e.target.closest('a[href]');
             if (!link || link.hasAttribute('target') || link.hasAttribute('download')) return;
             
             const href = link.getAttribute('href');
             if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:')) return;
+            
+            // Stop video stream before navigation (critical for fast page load)
+            window.stopVideoStream();
             
             // Check if it's same origin
             try {
@@ -452,8 +469,15 @@
         
         // Complete loading bar when page is about to unload
         window.addEventListener('beforeunload', function() {
+            // Stop video streaming before page unload
+            window.stopVideoStream();
             loadingBar.classList.remove('loading');
             loadingBar.classList.add('complete');
+        });
+        
+        // Also handle popstate (back/forward navigation)
+        window.addEventListener('popstate', function() {
+            window.stopVideoStream();
         });
     })();
     </script>

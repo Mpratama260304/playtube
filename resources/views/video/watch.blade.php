@@ -418,7 +418,7 @@
                 <h3 class="text-sm sm:text-base font-bold text-gray-900 dark:text-white mb-3 px-1 sm:px-0">Related Videos</h3>
                 <div class="space-y-2">
                     @foreach($relatedVideos as $related)
-                        <a href="{{ route('video.watch', $related->slug) }}" class="flex gap-2 group hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg p-1 -mx-1 transition-colors">
+                        <a href="{{ route('video.watch', $related->slug) }}" @click="stopVideo()" class="flex gap-2 group hover:bg-gray-100 dark:hover:bg-gray-800/50 rounded-lg p-1 -mx-1 transition-colors">
                             <div class="relative w-36 sm:w-40 lg:w-44 aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden flex-shrink-0">
                                 @if($related->has_thumbnail)
                                     <img 
@@ -503,20 +503,60 @@
                     });
                 },
                 
-                // Cleanup video when navigating away
+                // Cleanup video when navigating away - CRITICAL for fast navigation
                 initNavigationCleanup() {
                     const video = document.getElementById('video-player');
                     if (!video) return;
                     
-                    // Simple cleanup - just pause video before navigation
+                    // Aggressive cleanup to stop all streaming immediately
                     const cleanup = () => {
-                        if (video && !video.paused) {
-                            video.pause();
+                        try {
+                            // 1. Pause video immediately
+                            if (!video.paused) {
+                                video.pause();
+                            }
+                            
+                            // 2. Clear video source to abort any pending requests
+                            video.removeAttribute('src');
+                            video.load(); // This aborts pending network requests
+                            
+                            // 3. Remove source elements
+                            const sources = video.querySelectorAll('source');
+                            sources.forEach(s => s.remove());
+                        } catch (e) {
+                            // Ignore errors during cleanup
                         }
                     };
                     
+                    // Handle all navigation events
                     window.addEventListener('beforeunload', cleanup);
                     window.addEventListener('pagehide', cleanup);
+                    
+                    // For SPA-like navigation (clicking links)
+                    document.addEventListener('click', (e) => {
+                        const link = e.target.closest('a');
+                        if (link && link.href && !link.href.includes('#') && !link.target) {
+                            cleanup();
+                        }
+                    }, true);
+                    
+                    // Also cleanup when Alpine component is destroyed
+                    this.$watch('videoReady', () => {
+                        // If component is being destroyed, cleanup
+                        if (!document.getElementById('video-player')) {
+                            cleanup();
+                        }
+                    });
+                },
+                
+                // Method to manually stop video (can be called from UI)
+                stopVideo() {
+                    const video = document.getElementById('video-player');
+                    if (video) {
+                        video.pause();
+                        video.removeAttribute('src');
+                        video.load();
+                    }
                 },
                 
                 initQualitySelector() {
