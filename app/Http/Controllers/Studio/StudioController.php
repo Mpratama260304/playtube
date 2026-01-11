@@ -74,45 +74,24 @@ class StudioController extends Controller
                 $this->videoService->generateThumbnailSync($video);
             }
 
-            // Set status to processing immediately
+            // Set status to published immediately (video is playable)
+            // Processing happens in background
             $video->update([
-                'status' => 'processing',
+                'status' => 'published',
                 'processing_state' => 'processing',
             ]);
 
-            // Process video IMMEDIATELY (no queue) - extract metadata
-            try {
-                ProcessVideoJob::dispatchSync($video);
-                $video->refresh();
-                
-                // Now process stream MP4 (fast start) immediately
-                \App\Jobs\PrepareStreamMp4Job::dispatchSync($video);
-                $video->refresh();
-                
-                $video->update([
-                    'status' => 'published',
-                    'processing_state' => 'ready',
-                ]);
-                
-                \Log::info('Video processed immediately', [
-                    'video_id' => $video->id,
-                    'stream_ready' => $video->stream_ready,
-                ]);
-            } catch (\Exception $e) {
-                \Log::error('Immediate processing failed', [
-                    'video_id' => $video->id,
-                    'error' => $e->getMessage(),
-                ]);
-                $video->update([
-                    'status' => 'published',
-                    'processing_state' => 'failed',
-                    'processing_error' => $e->getMessage(),
-                ]);
-            }
+            // Queue background processing (non-blocking)
+            ProcessVideoJob::dispatch($video)->onQueue('high');
+            \App\Jobs\PrepareStreamMp4Job::dispatch($video)->onQueue('high');
+            
+            \Log::info('Video uploaded and queued for processing', [
+                'video_id' => $video->id,
+            ]);
 
             return redirect()
                 ->route('studio.edit', $video)
-                ->with('success', 'Video uploaded and processed!');
+                ->with('success', 'Video uploaded! Processing in background...');
                 
         } catch (\Exception $e) {
             \Log::error('Video upload failed', [
@@ -237,35 +216,20 @@ class StudioController extends Controller
                 $this->videoService->generateThumbnailSync($video);
             }
 
-            // Set status to processing immediately
+            // Set status to published immediately (video is playable)
+            // Processing happens in background
             $video->update([
-                'status' => 'processing',
+                'status' => 'published',
                 'processing_state' => 'processing',
             ]);
 
-            // Process video IMMEDIATELY (no queue)
-            try {
-                ProcessVideoJob::dispatchSync($video);
-                $video->refresh();
-                
-                \App\Jobs\PrepareStreamMp4Job::dispatchSync($video);
-                $video->refresh();
-                
-                $video->update([
-                    'status' => 'published',
-                    'processing_state' => 'ready',
-                ]);
-            } catch (\Exception $e) {
-                $video->update([
-                    'status' => 'published',
-                    'processing_state' => 'failed',
-                    'processing_error' => $e->getMessage(),
-                ]);
-            }
+            // Queue background processing (non-blocking)
+            ProcessVideoJob::dispatch($video)->onQueue('high');
+            \App\Jobs\PrepareStreamMp4Job::dispatch($video)->onQueue('high');
 
             return response()->json([
                 'success' => true,
-                'message' => 'Video uploaded and processed!',
+                'message' => 'Video uploaded! Processing in background...',
                 'video' => [
                     'id' => $video->id,
                     'uuid' => $video->uuid,
@@ -371,11 +335,11 @@ class StudioController extends Controller
     {
         $this->authorize('update', $video);
 
-        // Only allow retry for failed videos
-        if (!in_array($video->status, ['failed', 'processing'])) {
+        // Only allow retry for failed or stuck videos
+        if (!in_array($video->status, ['failed', 'processing', 'published'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Video is not in a failed state.',
+                'message' => 'Video cannot be reprocessed.',
             ], 422);
         }
 
@@ -387,52 +351,25 @@ class StudioController extends Controller
             ], 422);
         }
 
-        // Reset status and process immediately
+        // Update status and queue processing
         $video->update([
-            'status' => 'processing',
+            'status' => 'published',
             'processing_state' => 'processing',
             'processing_error' => null,
         ]);
 
-        // Process immediately (no queue)
-        try {
-            ProcessVideoJob::dispatchSync($video);
-            $video->refresh();
-            
-            \App\Jobs\PrepareStreamMp4Job::dispatchSync($video);
-            $video->refresh();
-            
-            $video->update([
-                'status' => 'published',
-                'processing_state' => 'ready',
-            ]);
-            
-            \Log::info('Video reprocessing completed', [
-                'video_id' => $video->id,
-                'user_id' => auth()->id(),
-                'stream_ready' => $video->stream_ready,
-            ]);
+        // Queue background processing (non-blocking)
+        ProcessVideoJob::dispatch($video)->onQueue('high');
+        \App\Jobs\PrepareStreamMp4Job::dispatch($video)->onQueue('high');
+        
+        \Log::info('Video reprocessing queued', [
+            'video_id' => $video->id,
+            'user_id' => auth()->id(),
+        ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Video processing completed successfully!',
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Video reprocessing failed', [
-                'video_id' => $video->id,
-                'error' => $e->getMessage(),
-            ]);
-            
-            $video->update([
-                'status' => 'published',
-                'processing_state' => 'failed',
-                'processing_error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Processing failed: ' . $e->getMessage(),
-            ], 500);
-        }
+        return response()->json([
+            'success' => true,
+            'message' => 'Video reprocessing started in background!',
+        ]);
     }
 }
