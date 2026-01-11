@@ -64,6 +64,16 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         intl \
         opcache
 
+# Install PHP Redis extension (phpredis) for queue/cache/session
+RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del --no-network .build-deps \
+    && rm -rf /tmp/pear
+
+# Verify redis extension is installed
+RUN php -m | grep -i redis
+
 # Install Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

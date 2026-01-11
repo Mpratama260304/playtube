@@ -40,6 +40,7 @@ services:
       - CACHE_STORE=redis
       - SESSION_DRIVER=redis
       - SESSION_SECURE_COOKIE=${SESSION_SECURE_COOKIE:-true}
+      - REDIS_CLIENT=phpredis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       
@@ -63,22 +64,11 @@ services:
     networks:
       - playtube-network
     healthcheck:
-      # Robust healthcheck with HTTP fallback to process check
-      # Prefers wget/curl HTTP check, falls back to process detection
-      test:
-        - CMD-SHELL
-        - |
-          if command -v wget >/dev/null 2>&1; then
-            wget -q --spider http://127.0.0.1/health || wget -q --spider http://127.0.0.1/ || exit 1
-          elif command -v curl >/dev/null 2>&1; then
-            curl -fsS http://127.0.0.1/health >/dev/null || curl -fsS http://127.0.0.1/ >/dev/null || exit 1
-          else
-            (ps | grep -q '[n]ginx' || ps aux 2>/dev/null | grep -q '[n]ginx') &&
-            (ps | grep -q '[p]hp-fpm' || ps aux 2>/dev/null | grep -q '[p]hp-fpm') || exit 1
-          fi
+      # HTTP healthcheck using curl (installed in image)
+      test: ["CMD-SHELL", "curl -fsS http://localhost/health >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
-      start_period: 180s
+      start_period: 120s
       retries: 10
 
   # ==========================================
@@ -106,8 +96,10 @@ services:
       - QUEUE_CONNECTION=redis
       - CACHE_DRIVER=redis
       - CACHE_STORE=redis
+      - REDIS_CLIENT=phpredis
       - REDIS_HOST=${REDIS_HOST:-redis}
       - VIDEO_DELIVERY_DRIVER=nginx
+      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
     volumes:
       - playtube-storage:/var/www/html/storage
       - playtube-logs:/var/www/html/storage/logs
@@ -146,7 +138,9 @@ services:
       - QUEUE_CONNECTION=redis
       - CACHE_DRIVER=redis
       - CACHE_STORE=redis
+      - REDIS_CLIENT=phpredis
       - REDIS_HOST=${REDIS_HOST:-redis}
+      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
     volumes:
       - playtube-storage:/var/www/html/storage
       - playtube-logs:/var/www/html/storage/logs
