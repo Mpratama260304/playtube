@@ -34,20 +34,39 @@
     @if($shorts->count() > 0)
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
             @foreach($shorts as $short)
-                <a href="{{ route('shorts.watch', $short) }}" class="group">
+                <a href="{{ route('shorts.show', $short->slug) }}" class="group">
                     <div class="relative aspect-[9/16] bg-gray-800 rounded-xl overflow-hidden">
-                        @if($short->thumbnail)
+                        @if($short->thumbnail_url)
                             <img src="{{ $short->thumbnail_url }}" alt="{{ $short->title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200">
                         @else
-                            <div class="w-full h-full flex items-center justify-center">
+                            <!-- Fallback: use video poster -->
+                            <video 
+                                class="w-full h-full object-cover"
+                                poster="{{ $short->thumbnail_url }}"
+                                muted
+                                preload="none"
+                            >
+                                <source src="{{ $short->video_url }}" type="video/mp4">
+                            </video>
+                            <div class="absolute inset-0 flex items-center justify-center bg-gray-900">
                                 <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                 </svg>
                             </div>
                         @endif
+                        
+                        <!-- Play button overlay -->
+                        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            <div class="w-12 h-12 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center">
+                                <svg class="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z"/>
+                                </svg>
+                            </div>
+                        </div>
+                        
                         <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                             <p class="text-white text-sm line-clamp-2">{{ $short->title }}</p>
-                            <p class="text-gray-300 text-xs">{{ number_format($short->views_count) }} views</p>
+                            <p class="text-gray-300 text-xs">{{ $short->views_formatted }} views</p>
                         </div>
                     </div>
                 </a>

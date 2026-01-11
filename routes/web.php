@@ -41,6 +41,7 @@ Route::get('/latest', [HomeController::class, 'latest'])->name('latest');
 // Video Watch
 Route::get('/watch/{video:slug}', [VideoController::class, 'watch'])->name('video.watch');
 Route::get('/embed/{video:slug}', [VideoController::class, 'embed'])->name('video.embed');
+Route::get('/video/{video}/comments', [VideoController::class, 'comments'])->name('video.comments');
 
 // Video Streaming with Range support (for smooth playback/seeking)
 Route::get('/stream/{video:uuid}', [VideoStreamController::class, 'stream'])->name('video.stream');

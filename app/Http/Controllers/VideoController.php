@@ -94,6 +94,25 @@ class VideoController extends Controller
         ));
     }
 
+    /**
+     * Get comments for a video as JSON (for AJAX requests)
+     */
+    public function comments(Video $video)
+    {
+        $comments = $video->comments()
+            ->with(['user', 'replies.user'])
+            ->rootComments()
+            ->latest()
+            ->paginate(15);
+
+        return response()->json([
+            'comments' => $comments->items(),
+            'total' => $video->comments_count ?? $comments->total(),
+            'has_more' => $comments->hasMorePages(),
+            'next_page' => $comments->hasMorePages() ? $comments->currentPage() + 1 : null,
+        ]);
+    }
+
     protected function recordView(Video $video): void
     {
         $sessionId = session()->getId();

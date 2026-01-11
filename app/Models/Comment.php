@@ -20,6 +20,10 @@ class Comment extends Model
         'likes_count' => 'integer',
     ];
 
+    protected $appends = [
+        'created_at_formatted',
+    ];
+
     public function video(): BelongsTo
     {
         return $this->belongsTo(Video::class);

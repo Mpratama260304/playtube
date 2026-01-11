@@ -35,6 +35,10 @@ class User extends Authenticatable implements FilamentUser
         'remember_token',
     ];
 
+    protected $appends = [
+        'avatar_url',
+    ];
+
     protected function casts(): array
     {
         return [

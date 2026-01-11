@@ -8,11 +8,6 @@ use Illuminate\Http\JsonResponse;
 
 class CreatorRequestController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
-
     /**
      * Get the current user's creator status
      */

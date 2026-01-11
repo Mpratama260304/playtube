@@ -104,10 +104,16 @@ class ChannelController extends Controller
             $subscribed = true;
         }
 
-        return response()->json([
-            'success' => true,
-            'subscribed' => $subscribed,
-            'subscribers_count' => $channel->subscribers()->count(),
-        ]);
+        // Handle AJAX requests
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json([
+                'success' => true,
+                'subscribed' => $subscribed,
+                'subscribers_count' => $channel->subscribers()->count(),
+            ]);
+        }
+
+        // Handle regular form submissions - redirect back
+        return back()->with('success', $subscribed ? 'Subscribed successfully!' : 'Unsubscribed successfully!');
     }
 }
