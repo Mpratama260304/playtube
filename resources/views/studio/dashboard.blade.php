@@ -4,13 +4,63 @@
     <div class="max-w-7xl mx-auto">
         <div class="flex items-center justify-between mb-8">
             <h1 class="text-2xl font-bold text-white">Creator Studio</h1>
-            <a href="{{ route('studio.upload') }}" class="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Upload Video
-            </a>
+            @if(auth()->user()->isCreator())
+                <a href="{{ route('studio.upload') }}" class="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Upload Video
+                </a>
+            @else
+                <a href="{{ route('studio.upload') }}" class="flex items-center px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Request Upload Access
+                </a>
+            @endif
         </div>
+
+        <!-- Creator Status Banner -->
+        @if(!auth()->user()->isCreator())
+            @php
+                $latestRequest = auth()->user()->latestCreatorRequest;
+            @endphp
+            <div class="mb-6 p-4 rounded-xl {{ $latestRequest && $latestRequest->status === 'pending' ? 'bg-yellow-500/10 border border-yellow-500/50' : ($latestRequest && $latestRequest->status === 'rejected' ? 'bg-red-500/10 border border-red-500/50' : 'bg-blue-500/10 border border-blue-500/50') }}">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        @if($latestRequest && $latestRequest->status === 'pending')
+                            <svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div>
+                                <p class="text-yellow-500 font-medium">Creator Request Pending</p>
+                                <p class="text-gray-400 text-sm">Your request is being reviewed. You'll be notified once approved.</p>
+                            </div>
+                        @elseif($latestRequest && $latestRequest->status === 'rejected')
+                            <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div>
+                                <p class="text-red-500 font-medium">Creator Request Rejected</p>
+                                <p class="text-gray-400 text-sm">{{ $latestRequest->admin_notes ?? 'You can submit a new request.' }}</p>
+                            </div>
+                        @else
+                            <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div>
+                                <p class="text-blue-400 font-medium">Want to upload videos?</p>
+                                <p class="text-gray-400 text-sm">Request creator access to start sharing content on PlayTube.</p>
+                            </div>
+                        @endif
+                    </div>
+                    <a href="{{ route('studio.upload') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        {{ $latestRequest && $latestRequest->status === 'pending' ? 'View Status' : 'Request Access' }}
+                    </a>
+                </div>
+            </div>
+        @endif
 
         <!-- Stats Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -19,6 +19,14 @@
             <x-input-error :messages="$errors->get('name')" class="mt-2" />
         </div>
 
+        <!-- Username -->
+        <div>
+            <x-input-label for="username" :value="__('Username')" />
+            <x-text-input id="username" class="block mt-1.5 w-full" type="text" name="username" :value="old('username')" required autocomplete="username" placeholder="yourhandle" />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">This will be your channel URL: playtube.com/@username</p>
+            <x-input-error :messages="$errors->get('username')" class="mt-2" />
+        </div>
+
         <!-- Email Address -->
         <div>
             <x-input-label for="email" :value="__('Email')" />

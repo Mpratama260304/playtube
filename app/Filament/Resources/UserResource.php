@@ -55,10 +55,14 @@ class UserResource extends Resource
                             ])
                             ->required()
                             ->default('user'),
+                        Forms\Components\Toggle::make('is_creator')
+                            ->label('Creator Access')
+                            ->helperText('Allow this user to upload videos')
+                            ->default(false),
                         Forms\Components\Toggle::make('is_banned')
                             ->label('Banned')
                             ->default(false),
-                    ])->columns(2),
+                    ])->columns(3),
 
                 Forms\Components\Section::make('Profile')
                     ->schema([
@@ -98,6 +102,13 @@ class UserResource extends Resource
                         'danger' => 'admin',
                         'success' => 'user',
                     ]),
+                Tables\Columns\IconColumn::make('is_creator')
+                    ->label('Creator')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-badge')
+                    ->falseIcon('heroicon-o-minus-circle')
+                    ->trueColor('success')
+                    ->falseColor('gray'),
                 Tables\Columns\IconColumn::make('is_banned')
                     ->label('Banned')
                     ->boolean(),
@@ -112,11 +123,24 @@ class UserResource extends Resource
                         'user' => 'User',
                         'admin' => 'Admin',
                     ]),
+                Tables\Filters\TernaryFilter::make('is_creator')
+                    ->label('Creator'),
                 Tables\Filters\TernaryFilter::make('is_banned')
                     ->label('Banned'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+                Tables\Actions\Action::make('toggle_creator')
+                    ->label(fn (User $record) => $record->is_creator ? 'Revoke Creator' : 'Grant Creator')
+                    ->icon(fn (User $record) => $record->is_creator ? 'heroicon-o-x-circle' : 'heroicon-o-check-badge')
+                    ->color(fn (User $record) => $record->is_creator ? 'warning' : 'success')
+                    ->action(function (User $record) {
+                        $record->update([
+                            'is_creator' => !$record->is_creator,
+                            'creator_approved_at' => !$record->is_creator ? now() : null,
+                        ]);
+                    })
+                    ->requiresConfirmation(),
                 Tables\Actions\Action::make('ban')
                     ->label('Toggle Ban')
                     ->icon('heroicon-o-no-symbol')

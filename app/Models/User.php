@@ -26,6 +26,8 @@ class User extends Authenticatable implements FilamentUser
         'bio',
         'is_banned',
         'is_active',
+        'is_creator',
+        'creator_approved_at',
     ];
 
     protected $hidden = [
@@ -40,6 +42,8 @@ class User extends Authenticatable implements FilamentUser
             'password' => 'hashed',
             'is_banned' => 'boolean',
             'is_active' => 'boolean',
+            'is_creator' => 'boolean',
+            'creator_approved_at' => 'datetime',
         ];
     }
 
@@ -147,5 +151,45 @@ class User extends Authenticatable implements FilamentUser
     public function isSubscribedTo(User $channel): bool
     {
         return $this->subscriptions()->where('channel_id', $channel->id)->exists();
+    }
+
+    // Creator permission methods
+    public function creatorRequests(): HasMany
+    {
+        return $this->hasMany(CreatorRequest::class);
+    }
+
+    public function latestCreatorRequest()
+    {
+        return $this->hasOne(CreatorRequest::class)->latestOfMany();
+    }
+
+    public function isCreator(): bool
+    {
+        return $this->is_creator || $this->isAdmin();
+    }
+
+    public function canUploadVideos(): bool
+    {
+        return $this->isCreator() && !$this->is_banned;
+    }
+
+    public function hasPendingCreatorRequest(): bool
+    {
+        return $this->creatorRequests()->where('status', 'pending')->exists();
+    }
+
+    public function getCreatorStatusAttribute(): string
+    {
+        if ($this->is_creator) {
+            return 'approved';
+        }
+        
+        $latestRequest = $this->latestCreatorRequest;
+        if ($latestRequest) {
+            return $latestRequest->status;
+        }
+        
+        return 'none';
     }
 }

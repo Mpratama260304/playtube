@@ -4,6 +4,248 @@
     <div class="max-w-3xl mx-auto" x-data="uploadForm()">
         <h1 class="text-2xl font-bold text-white mb-8">Upload Video</h1>
 
+        @if(!$isCreator)
+        <!-- Creator Access Required Modal -->
+        <div class="fixed inset-0 bg-black/80 flex items-center justify-center z-50" x-data="creatorRequest()">
+            <div class="bg-gray-900 rounded-xl p-8 max-w-lg w-full mx-4">
+                <!-- Header -->
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 mx-auto mb-4 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                        <svg class="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                    </div>
+                    <h2 class="text-xl font-bold text-white">Creator Access Required</h2>
+                    <p class="text-gray-400 mt-2">You need creator permission to upload videos on PlayTube.</p>
+                </div>
+
+                @if($hasPendingRequest)
+                    <!-- Pending Request Status -->
+                    <div class="bg-yellow-500/10 border border-yellow-500/50 rounded-lg p-4 mb-6">
+                        <div class="flex items-center space-x-3">
+                            <div class="flex-shrink-0">
+                                <svg class="w-5 h-5 text-yellow-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-yellow-500 font-medium">Request Pending</p>
+                                <p class="text-gray-400 text-sm">Your creator request is being reviewed by an administrator.</p>
+                                @if($latestRequest)
+                                    <p class="text-gray-500 text-xs mt-1">Submitted {{ $latestRequest->created_at->diffForHumans() }}</p>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex space-x-3">
+                        <a href="{{ route('studio.dashboard') }}" class="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg text-center transition-colors">
+                            Back to Studio
+                        </a>
+                        <button @click="cancelRequest()" 
+                                class="flex-1 py-3 px-4 bg-red-600/20 hover:bg-red-600/30 text-red-500 font-medium rounded-lg transition-colors"
+                                :disabled="loading">
+                            <span x-show="!loading">Cancel Request</span>
+                            <span x-show="loading" class="flex items-center justify-center">
+                                <svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
+
+                @elseif($latestRequest && $latestRequest->status === 'rejected')
+                    <!-- Rejected Status -->
+                    <div class="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-6">
+                        <div class="flex items-start space-x-3">
+                            <div class="flex-shrink-0 mt-0.5">
+                                <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-red-500 font-medium">Previous Request Rejected</p>
+                                @if($latestRequest->admin_notes)
+                                    <p class="text-gray-400 text-sm mt-1">Reason: {{ $latestRequest->admin_notes }}</p>
+                                @endif
+                                <p class="text-gray-500 text-xs mt-1">Rejected {{ $latestRequest->reviewed_at->diffForHumans() }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Allow re-request -->
+                    <div x-show="!showForm">
+                        <p class="text-gray-400 text-sm text-center mb-4">You can submit a new request with more information.</p>
+                        <div class="flex space-x-3">
+                            <a href="{{ route('studio.dashboard') }}" class="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg text-center transition-colors">
+                                Back to Studio
+                            </a>
+                            <button @click="showForm = true" class="flex-1 py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg transition-colors">
+                                Request Again
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Request Form (for re-request) -->
+                    <form x-show="showForm" @submit.prevent="submitRequest()" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Why do you want to become a creator?</label>
+                            <textarea x-model="reason" 
+                                      rows="4" 
+                                      class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                                      placeholder="Tell us about the type of content you want to create, your experience, and why you'd be a great addition to PlayTube..."
+                                      required
+                                      minlength="20"
+                                      maxlength="1000"></textarea>
+                            <p class="text-gray-500 text-xs mt-1" x-text="reason.length + '/1000 characters (minimum 20)'"></p>
+                        </div>
+
+                        <div x-show="error" class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-500 text-sm" x-text="error"></div>
+
+                        <div class="flex space-x-3">
+                            <button type="button" @click="showForm = false" class="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit" 
+                                    class="flex-1 py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                                    :disabled="loading || reason.length < 20">
+                                <span x-show="!loading">Submit Request</span>
+                                <span x-show="loading" class="flex items-center justify-center">
+                                    <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Submitting...
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+
+                @else
+                    <!-- New Request Form -->
+                    <form @submit.prevent="submitRequest()" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">Why do you want to become a creator?</label>
+                            <textarea x-model="reason" 
+                                      rows="4" 
+                                      class="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                                      placeholder="Tell us about the type of content you want to create, your experience, and why you'd be a great addition to PlayTube..."
+                                      required
+                                      minlength="20"
+                                      maxlength="1000"></textarea>
+                            <p class="text-gray-500 text-xs mt-1" x-text="reason.length + '/1000 characters (minimum 20)'"></p>
+                        </div>
+
+                        <div x-show="error" class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-500 text-sm" x-text="error"></div>
+                        <div x-show="success" class="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-500 text-sm" x-text="success"></div>
+
+                        <div class="flex space-x-3">
+                            <a href="{{ route('studio.dashboard') }}" class="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg text-center transition-colors">
+                                Back to Studio
+                            </a>
+                            <button type="submit" 
+                                    class="flex-1 py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                                    :disabled="loading || reason.length < 20">
+                                <span x-show="!loading">Submit Request</span>
+                                <span x-show="loading" class="flex items-center justify-center">
+                                    <svg class="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Submitting...
+                                </span>
+                            </button>
+                        </div>
+                    </form>
+                @endif
+
+                <!-- Info -->
+                <div class="mt-6 pt-6 border-t border-gray-800">
+                    <p class="text-gray-500 text-xs text-center">
+                        As a creator, you'll be able to upload videos, create playlists, and build your audience on PlayTube.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        @push('scripts')
+        <script>
+            function creatorRequest() {
+                return {
+                    reason: '',
+                    loading: false,
+                    error: '',
+                    success: '',
+                    showForm: false,
+
+                    async submitRequest() {
+                        this.loading = true;
+                        this.error = '';
+                        this.success = '';
+
+                        try {
+                            const response = await fetch('{{ route('creator.request') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json'
+                                },
+                                body: JSON.stringify({ reason: this.reason })
+                            });
+
+                            const data = await response.json();
+
+                            if (data.success) {
+                                this.success = data.message;
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 2000);
+                            } else {
+                                this.error = data.message || 'Failed to submit request';
+                            }
+                        } catch (e) {
+                            this.error = 'Network error. Please try again.';
+                        } finally {
+                            this.loading = false;
+                        }
+                    },
+
+                    async cancelRequest() {
+                        if (!confirm('Are you sure you want to cancel your creator request?')) return;
+                        
+                        this.loading = true;
+                        this.error = '';
+
+                        try {
+                            const response = await fetch('{{ route('creator.cancel') }}', {
+                                method: 'DELETE',
+                                headers: {
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                    'Accept': 'application/json'
+                                }
+                            });
+
+                            const data = await response.json();
+
+                            if (data.success) {
+                                window.location.reload();
+                            } else {
+                                this.error = data.message || 'Failed to cancel request';
+                            }
+                        } catch (e) {
+                            this.error = 'Network error. Please try again.';
+                        } finally {
+                            this.loading = false;
+                        }
+                    }
+                }
+            }
+        </script>
+        @endpush
+        @endif
+
         <!-- Upload Progress Overlay -->
         <div x-show="uploading" 
              x-cloak

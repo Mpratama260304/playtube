@@ -138,6 +138,11 @@ Route::middleware(['auth'])->group(function () {
     // Reports
     Route::post('/report', [ReportController::class, 'store'])->name('report.store');
 
+    // Creator Request
+    Route::get('/creator/status', [App\Http\Controllers\CreatorRequestController::class, 'status'])->name('creator.status');
+    Route::post('/creator/request', [App\Http\Controllers\CreatorRequestController::class, 'store'])->name('creator.request');
+    Route::delete('/creator/request', [App\Http\Controllers\CreatorRequestController::class, 'cancel'])->name('creator.cancel');
+
     // User Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile');

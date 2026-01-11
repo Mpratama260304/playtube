@@ -53,12 +53,25 @@ class StudioController extends Controller
 
     public function upload()
     {
+        $user = auth()->user();
         $categories = Category::orderBy('name')->get();
-        return view('studio.upload', compact('categories'));
+        
+        // Pass creator status to view
+        $isCreator = $user->isCreator();
+        $hasPendingRequest = $user->hasPendingCreatorRequest();
+        $latestRequest = $user->latestCreatorRequest;
+        
+        return view('studio.upload', compact('categories', 'isCreator', 'hasPendingRequest', 'latestRequest'));
     }
 
     public function store(UploadVideoRequest $request)
     {
+        // Check if user can upload
+        $user = auth()->user();
+        if (!$user->canUploadVideos()) {
+            return back()->withErrors(['video' => 'You do not have permission to upload videos. Please request creator access first.']);
+        }
+
         try {
             $video = $this->videoService->createVideo(
                 $request->validated(),
