@@ -1,6 +1,13 @@
 import './bootstrap';
 
 import Alpine from 'alpinejs';
+import Hls from 'hls.js';
+
+// Make HLS.js globally available
+window.Hls = Hls;
+
+// Import PlayTube Player
+import './playtube-player';
 
 // Theme Store
 Alpine.store('theme', {

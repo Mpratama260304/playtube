@@ -22,6 +22,10 @@ Route::prefix('v1')->group(function () {
     Route::get('/videos/{video}', [VideoApiController::class, 'show']);
     Route::get('/videos/{video}/related', [VideoApiController::class, 'related']);
     Route::get('/videos/{video}/playback-status', [VideoApiController::class, 'playbackStatus']);
+    Route::get('/videos/{video}/stream-config', [VideoApiController::class, 'streamConfig']);
+    
+    // Go Video Server status
+    Route::get('/video-server/status', [VideoApiController::class, 'serverStatus']);
     
     // Search
     Route::get('/search', [SearchApiController::class, 'search']);
@@ -40,6 +44,7 @@ Route::middleware(['web', 'auth'])->prefix('v1')->group(function () {
     Route::post('/videos/{video}/react', [VideoApiController::class, 'react']);
     Route::post('/videos/{video}/comment', [VideoApiController::class, 'storeComment']);
     Route::get('/videos/{video}/comments', [VideoApiController::class, 'comments']);
+    Route::post('/videos/{video}/generate-hls', [VideoApiController::class, 'generateHls']);
     
     // Comment reactions
     Route::post('/comments/{comment}/react', [VideoApiController::class, 'reactComment']);

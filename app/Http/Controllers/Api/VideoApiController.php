@@ -8,10 +8,22 @@ use App\Models\Category;
 use App\Models\Comment;
 use App\Models\Reaction;
 use App\Models\Video;
+use App\Services\GoVideoService;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 
 class VideoApiController extends Controller
 {
+    protected ?GoVideoService $goVideoService = null;
+
+    public function __construct()
+    {
+        // Lazy load GoVideoService only when needed
+        if (config('playtube.use_go_video_server', true)) {
+            $this->goVideoService = app(GoVideoService::class);
+        }
+    }
+
     public function index(Request $request)
     {
         $videos = Video::published()
@@ -187,6 +199,129 @@ class VideoApiController extends Controller
             'processing_progress' => $video->processing_progress ?? 0,
             'hls_enabled' => $video->hls_enabled,
             'duration_seconds' => $video->duration_seconds,
+        ]);
+    }
+
+    /**
+     * Get streaming configuration for video player (Go Server integration)
+     */
+    public function streamConfig(Video $video): JsonResponse
+    {
+        if (!$video->canBeViewedBy(auth()->user())) {
+            return response()->json(['error' => 'Video not found'], 404);
+        }
+
+        // Check if Go server should be used
+        $useGoServer = $this->goVideoService && $this->goVideoService->shouldUseGoServer();
+
+        if ($useGoServer) {
+            $urls = $this->goVideoService->getStreamingUrls($video);
+
+            return response()->json([
+                'success' => true,
+                'streaming_method' => 'go-server',
+                'video' => [
+                    'uuid' => $video->uuid,
+                    'title' => $video->title,
+                    'duration' => $video->duration,
+                    'poster' => $video->thumbnail_url,
+                ],
+                'streams' => [
+                    'hls' => $urls['hls'],
+                    'dash' => $urls['dash'] ?? null,
+                    'progressive' => $urls['progressive'],
+                ],
+                'qualities' => $urls['qualities'],
+                'recommended' => $video->hls_status === 'ready' ? 'hls' : 'progressive',
+                'features' => [
+                    'adaptive_streaming' => true,
+                    'quality_selection' => true,
+                    'seeking' => true,
+                    'preload' => true,
+                ],
+            ]);
+        }
+
+        // Laravel fallback
+        $streamUrl = route('video.stream', $video);
+        $qualities = [];
+
+        if ($video->renditions) {
+            foreach ($video->renditions as $quality => $info) {
+                $qualities[$quality] = [
+                    'url' => $streamUrl . '?quality=' . rtrim($quality, 'p'),
+                    'bitrate' => $info['bitrate_kbps'] ?? 0,
+                    'width' => $info['width'] ?? 0,
+                    'height' => $info['height'] ?? 0,
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'streaming_method' => 'laravel',
+            'video' => [
+                'uuid' => $video->uuid,
+                'title' => $video->title,
+                'duration' => $video->duration,
+                'poster' => $video->thumbnail_url,
+            ],
+            'streams' => [
+                'hls' => null,
+                'dash' => null,
+                'progressive' => $streamUrl,
+            ],
+            'qualities' => $qualities,
+            'recommended' => 'progressive',
+            'features' => [
+                'adaptive_streaming' => false,
+                'quality_selection' => !empty($qualities),
+                'seeking' => true,
+                'preload' => true,
+            ],
+        ]);
+    }
+
+    /**
+     * Trigger HLS generation for a video (owner only)
+     */
+    public function generateHls(Request $request, Video $video): JsonResponse
+    {
+        if (auth()->id() !== $video->user_id && !auth()->user()?->isAdmin()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
+        if (in_array($video->hls_status ?? '', ['processing', 'queued'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'HLS generation already in progress',
+            ]);
+        }
+
+        \App\Jobs\GenerateHlsSegmentsJob::dispatch($video);
+        $video->update(['hls_status' => 'queued']);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'HLS generation started',
+        ]);
+    }
+
+    /**
+     * Get Go Video Server status
+     */
+    public function serverStatus(): JsonResponse
+    {
+        $stats = $this->goVideoService?->getStats();
+
+        return response()->json([
+            'success' => true,
+            'go_server' => [
+                'enabled' => config('playtube.use_go_video_server', true),
+                'healthy' => $this->goVideoService?->isHealthy() ?? false,
+                'url' => config('playtube.go_video_server_url'),
+                'stats' => $stats,
+            ],
         ]);
     }
 

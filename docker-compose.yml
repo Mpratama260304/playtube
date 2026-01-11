@@ -64,6 +64,36 @@ services:
     networks:
       - playtube-network
 
+  # ==========================================
+  # Go Video Streaming Server (High Performance)
+  # ==========================================
+  video-server:
+    build:
+      context: ./video-server
+      dockerfile: Dockerfile
+    container_name: playtube-video-server
+    restart: unless-stopped
+    ports:
+      - "${VIDEO_SERVER_PORT:-8090}:8090"
+    environment:
+      - VIDEO_SERVER_PORT=8090
+      - VIDEO_BASE_PATH=/data/videos
+      - HLS_BASE_PATH=/data/hls
+      - VIDEO_SECRET_KEY=${GO_VIDEO_SECRET_KEY:-playtube-video-secret-key-change-in-production}
+      - VIDEO_CACHE_SIZE=${VIDEO_CACHE_SIZE:-1073741824}
+      - VIDEO_CACHE_ENABLED=${VIDEO_CACHE_ENABLED:-true}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000,http://localhost:80}
+      - APP_ENV=${APP_ENV:-local}
+    volumes:
+      - playtube-storage:/data
+    networks:
+      - playtube-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # ==========================================
 # Networks
 # ==========================================
