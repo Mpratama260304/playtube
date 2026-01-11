@@ -322,6 +322,8 @@
     <!-- Comments Modal -->
     <div x-show="$store.shorts.showComments" 
          x-cloak
+         x-data="commentsModal()"
+         x-init="$watch('$store.shorts.showComments', (open) => { if (open) loadComments(); })"
          class="fixed inset-0 z-[60]"
          x-transition:enter="transition ease-out duration-300"
          x-transition:enter-start="opacity-0"
@@ -337,16 +339,86 @@
              x-transition:enter-end="translate-y-0 md:opacity-100 md:scale-100"
              @click.stop>
             <div class="bg-gray-900 rounded-t-2xl md:rounded-2xl max-h-[70vh] md:max-h-[80vh] flex flex-col pb-safe">
+                <!-- Header -->
                 <div class="flex items-center justify-between p-4 border-b border-white/10">
-                    <h3 class="font-semibold">Comments</h3>
+                    <h3 class="font-semibold">Comments <span class="text-white/50" x-text="'(' + totalComments + ')'"></span></h3>
                     <button @click="$store.shorts.showComments = false" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                         </svg>
                     </button>
                 </div>
-                <div class="flex-1 overflow-y-auto p-4 min-h-[200px]">
-                    <p class="text-center text-white/50">Loading comments...</p>
+                
+                <!-- Comment Form -->
+                @auth
+                <div class="p-4 border-b border-white/10">
+                    <form @submit.prevent="postComment()" class="flex gap-3">
+                        @if(auth()->user()->avatar_path)
+                            <img src="{{ auth()->user()->avatar_url }}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
+                        @else
+                            <div class="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                                {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}
+                            </div>
+                        @endif
+                        <input type="text" 
+                               x-model="newComment"
+                               placeholder="Add a comment..." 
+                               class="flex-1 bg-white/10 border-0 rounded-full px-4 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30">
+                        <button type="submit"
+                                :disabled="!newComment.trim() || posting"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-show="!posting">Post</span>
+                            <span x-show="posting">...</span>
+                        </button>
+                    </form>
+                </div>
+                @else
+                <div class="p-4 border-b border-white/10 text-center text-sm">
+                    <a href="{{ route('login') }}" class="text-blue-400 hover:underline">Sign in</a>
+                    <span class="text-white/60"> to comment</span>
+                </div>
+                @endauth
+                
+                <!-- Comments List -->
+                <div class="flex-1 overflow-y-auto p-4 min-h-[200px] space-y-4">
+                    <!-- Loading state -->
+                    <div x-show="loading" class="flex justify-center py-8">
+                        <svg class="animate-spin h-6 w-6 text-white/50" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    </div>
+                    
+                    <!-- Comments -->
+                    <template x-for="comment in comments" :key="comment.id">
+                        <div class="flex gap-3">
+                            <a :href="'/channel/' + comment.user.username" class="flex-shrink-0">
+                                <template x-if="comment.user.avatar_url">
+                                    <img :src="comment.user.avatar_url" class="w-8 h-8 rounded-full object-cover">
+                                </template>
+                                <template x-if="!comment.user.avatar_url">
+                                    <div class="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white text-sm font-medium" 
+                                         x-text="comment.user.name.charAt(0).toUpperCase()"></div>
+                                </template>
+                            </a>
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 text-sm">
+                                    <a :href="'/channel/' + comment.user.username" class="font-medium hover:underline" x-text="comment.user.name"></a>
+                                    <span class="text-white/50 text-xs" x-text="comment.created_at_formatted || comment.created_at"></span>
+                                </div>
+                                <p class="text-sm text-white/90 mt-1" x-text="comment.body"></p>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Empty state -->
+                    <div x-show="!loading && comments.length === 0" class="text-center py-8">
+                        <svg class="w-12 h-12 mx-auto text-white/30 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <p class="text-white/50">No comments yet</p>
+                        <p class="text-white/30 text-sm">Be the first to comment!</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -619,6 +691,90 @@
                         Alpine.store('shorts').showToast('Link copied!');
                     } catch (e) {
                         console.error('Failed to copy:', e);
+                    }
+                }
+            };
+        }
+
+        // Comments modal controller
+        function commentsModal() {
+            return {
+                comments: [],
+                newComment: '',
+                loading: false,
+                posting: false,
+                totalComments: 0,
+                loaded: false,
+                
+                async loadComments() {
+                    // Get current active video ID
+                    const activeIndex = Alpine.store('shorts').activeIndex;
+                    const activeSlide = document.querySelector(`[data-short-index="${activeIndex}"]`);
+                    if (!activeSlide) return;
+                    
+                    const videoId = activeSlide.dataset.shortId;
+                    if (!videoId) return;
+                    
+                    // Reset and load
+                    this.loading = true;
+                    this.comments = [];
+                    
+                    try {
+                        const response = await fetch(`/video/${videoId}/comments`, {
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.comments = data.comments || [];
+                            this.totalComments = data.total || this.comments.length;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load comments:', e);
+                    } finally {
+                        this.loading = false;
+                        this.loaded = true;
+                    }
+                },
+                
+                async postComment() {
+                    if (!this.newComment.trim() || this.posting) return;
+                    
+                    const activeIndex = Alpine.store('shorts').activeIndex;
+                    const activeSlide = document.querySelector(`[data-short-index="${activeIndex}"]`);
+                    if (!activeSlide) return;
+                    
+                    const videoId = activeSlide.dataset.shortId;
+                    if (!videoId) return;
+                    
+                    this.posting = true;
+                    
+                    try {
+                        const response = await fetch(`/video/${videoId}/comment`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({ body: this.newComment })
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.comment) {
+                                // Add new comment to the top
+                                this.comments.unshift(data.comment);
+                                this.totalComments++;
+                                this.newComment = '';
+                                Alpine.store('shorts').showToast('Comment posted!');
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to post comment:', e);
+                        Alpine.store('shorts').showToast('Failed to post comment');
+                    } finally {
+                        this.posting = false;
                     }
                 }
             };
