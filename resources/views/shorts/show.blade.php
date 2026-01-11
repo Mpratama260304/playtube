@@ -363,7 +363,7 @@
                         <input type="text" 
                                x-model="newComment"
                                placeholder="Add a comment..." 
-                               class="flex-1 bg-white/10 border-0 rounded-full px-4 py-2 text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30">
+                               class="flex-1 bg-white border-0 rounded-full px-4 py-2 text-sm text-black placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <button type="submit"
                                 :disabled="!newComment.trim() || posting"
                                 class="px-4 py-2 bg-blue-600 text-white rounded-full text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
