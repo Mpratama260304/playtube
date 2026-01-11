@@ -1,12 +1,12 @@
 # ============================================
 # PlayTube Docker Compose Configuration
+# Updated: Support for Shorts scroll feature
 # ============================================
 # Usage:
 #   Development: docker-compose up -d
 #   Production:  docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#   Build:       docker-compose build --no-cache
 # ============================================
-
-version: '3.8'
 
 services:
   # ==========================================
@@ -31,6 +31,8 @@ services:
       - CACHE_DRIVER=${CACHE_DRIVER:-file}
       - SESSION_DRIVER=${SESSION_DRIVER:-file}
       - FILESYSTEM_DISK=${FILESYSTEM_DISK:-public}
+      # Video server configuration
+      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
     volumes:
       # Persistent storage for uploads, database, and logs
       - playtube-storage:/var/www/html/storage/app
@@ -38,16 +40,22 @@ services:
       - playtube-logs:/var/www/html/storage/logs
     networks:
       - playtube-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
 
   # ==========================================
-  # Queue Worker (Optional - for background jobs)
+  # Queue Worker (for video processing & background jobs)
   # ==========================================
   queue:
     image: mpratamamail/playtube:latest
     container_name: playtube-queue
     restart: unless-stopped
     command: >
-      sh -c "sleep 30 && php artisan queue:work --sleep=3 --tries=3 --max-time=3600"
+      sh -c "sleep 30 && php artisan queue:work --sleep=3 --tries=3 --max-time=3600 --timeout=1800"
     environment:
       - APP_NAME=${APP_NAME:-PlayTube}
       - APP_ENV=${APP_ENV:-production}
@@ -57,15 +65,20 @@ services:
       - DB_CONNECTION=${DB_CONNECTION:-sqlite}
       - DB_DATABASE=${DB_DATABASE:-/var/www/html/database/database.sqlite}
       - QUEUE_CONNECTION=${QUEUE_CONNECTION:-database}
+      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
     volumes:
       - playtube-storage:/var/www/html/storage/app
       - playtube-database:/var/www/html/database
       - playtube-logs:/var/www/html/storage/logs
     networks:
       - playtube-network
+    depends_on:
+      app:
+        condition: service_healthy
 
   # ==========================================
   # Go Video Streaming Server (High Performance)
+  # Handles video streaming for regular videos and shorts
   # ==========================================
   video-server:
     build:
@@ -82,7 +95,7 @@ services:
       - VIDEO_SECRET_KEY=${GO_VIDEO_SECRET_KEY:-playtube-video-secret-key-change-in-production}
       - VIDEO_CACHE_SIZE=${VIDEO_CACHE_SIZE:-1073741824}
       - VIDEO_CACHE_ENABLED=${VIDEO_CACHE_ENABLED:-true}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000,http://localhost:80}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
       - APP_ENV=${APP_ENV:-local}
     volumes:
       - playtube-storage:/data
@@ -92,6 +105,7 @@ services:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
       interval: 30s
       timeout: 10s
+      start_period: 30s
       retries: 3
 
 # ==========================================

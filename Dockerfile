@@ -1,6 +1,7 @@
 # ============================================
 # PlayTube Laravel Application Dockerfile
 # Multi-stage build for production
+# Updated: Shorts scroll feature support
 # ============================================
 
 # Stage 1: Build frontend assets
@@ -11,20 +12,23 @@ WORKDIR /app
 # Copy package files
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies with clean cache
+RUN npm ci --no-audit --no-fund && npm cache clean --force
 
 # Copy source files needed for build
 COPY resources/ resources/
 COPY vite.config.js postcss.config.js tailwind.config.js ./
 
-# Build frontend assets
+# Build frontend assets for production
 RUN npm run build
 
 # ============================================
 # Stage 2: PHP/Laravel Application
 # ============================================
 FROM php:8.4-fpm-alpine AS app
+
+# Set environment for non-interactive installs
+ENV COMPOSER_ALLOW_SUPERUSER=1
 
 # Install system dependencies
 RUN apk add --no-cache \
@@ -42,7 +46,9 @@ RUN apk add --no-cache \
     sqlite \
     sqlite-dev \
     nginx \
-    supervisor
+    supervisor \
+    # Additional tools for video processing
+    && rm -rf /var/cache/apk/*
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
