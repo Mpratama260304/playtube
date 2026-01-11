@@ -904,7 +904,7 @@
                 async react(type) {
                     @auth
                     try {
-                        const response = await fetch('/video/' + this.short.id + '/react', {
+                        const response = await fetch('/video/' + this.short.slug + '/react', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
