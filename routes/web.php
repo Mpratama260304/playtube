@@ -22,9 +22,10 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Health Check (for Docker/Kubernetes)
 |--------------------------------------------------------------------------
+| NOTE: This endpoint must NOT hit DB/cache to avoid false failures
 */
 Route::get('/health', function () {
-    return response()->json(['status' => 'ok', 'timestamp' => now()->toISOString()]);
+    return response()->json(['status' => 'ok'], 200);
 });
 
 /*

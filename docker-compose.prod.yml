@@ -58,15 +58,28 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      video-server:
+        condition: service_healthy
     networks:
       - playtube-network
     healthcheck:
-      # Portable CLI-based healthcheck (no pgrep required)
-      test: ["CMD-SHELL", "test -f /var/run/nginx.pid && (ps aux | grep -q '[p]hp-fpm' || ps aux | grep -q '[p]hp-fpm8') || exit 1"]
+      # Robust healthcheck with HTTP fallback to process check
+      # Prefers wget/curl HTTP check, falls back to process detection
+      test:
+        - CMD-SHELL
+        - |
+          if command -v wget >/dev/null 2>&1; then
+            wget -q --spider http://127.0.0.1/health || wget -q --spider http://127.0.0.1/ || exit 1
+          elif command -v curl >/dev/null 2>&1; then
+            curl -fsS http://127.0.0.1/health >/dev/null || curl -fsS http://127.0.0.1/ >/dev/null || exit 1
+          else
+            (ps | grep -q '[n]ginx' || ps aux 2>/dev/null | grep -q '[n]ginx') &&
+            (ps | grep -q '[p]hp-fpm' || ps aux 2>/dev/null | grep -q '[p]hp-fpm') || exit 1
+          fi
       interval: 15s
       timeout: 5s
-      start_period: 90s
-      retries: 5
+      start_period: 180s
+      retries: 10
 
   # ==========================================
   # Queue Worker (High Priority)
@@ -99,8 +112,12 @@ services:
       - playtube-storage:/var/www/html/storage
       - playtube-logs:/var/www/html/storage/logs
     depends_on:
-      - app
-      - redis
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      video-server:
+        condition: service_healthy
     networks:
       - playtube-network
 
@@ -134,21 +151,26 @@ services:
       - playtube-storage:/var/www/html/storage
       - playtube-logs:/var/www/html/storage/logs
     depends_on:
-      - app
-      - redis
+      app:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      video-server:
+        condition: service_healthy
     networks:
       - playtube-network
 
   # ==========================================
   # Go Video Streaming Server (High Performance)
   # Handles video streaming for regular videos and shorts
+  # NOTE: Internal only - no host port binding (accessed via docker network)
   # ==========================================
   video-server:
     image: ${VIDEO_SERVER_IMAGE:-mpratamamail/playtube-video-server:latest}
     container_name: playtube-video-server
     restart: unless-stopped
-    ports:
-      - "${VIDEO_SERVER_PORT:-8090}:8090"
+    # No ports exposed to host - internal network only
+    # App/workers access via http://video-server:8090
     environment:
       - VIDEO_SERVER_PORT=8090
       - VIDEO_BASE_PATH=/data/videos
@@ -163,11 +185,11 @@ services:
     networks:
       - playtube-network
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8090/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
       start_period: 30s
-      retries: 3
+      retries: 10
 
   # ==========================================
   # Redis (Cache & Queue)
