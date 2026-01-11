@@ -1,7 +1,7 @@
 # ============================================
 # PlayTube Production Docker Compose
 # Optimized for video streaming performance
-# Updated: Phala Cloud deployment fixes
+# Updated: Phala Cloud - No Redis dependency (temporary fix)
 # NOTE: App image bundles nginx + php-fpm via supervisord
 # ============================================
 
@@ -17,33 +17,21 @@ services:
     # Phala creates public URL: https://<app-id>-8080.dstack-prod5.phala.network
     ports:
       - "8080:80"
-    # Override command to ensure nginx listens on 0.0.0.0:80 (not 127.0.0.1)
-    command:
-      - /bin/sh
-      - -c
-      - |
-        echo "==> Patching nginx to listen on all interfaces..."
-        for conf in /etc/nginx/http.d/*.conf /etc/nginx/conf.d/*.conf /etc/nginx/nginx.conf; do
-          if [ -f "$$conf" ]; then
-            sed -i 's/listen 127\.0\.0\.1:80/listen 80/g' "$$conf" 2>/dev/null || true
-            sed -i 's/listen localhost:80/listen 80/g' "$$conf" 2>/dev/null || true
-          fi
-        done
-        echo "==> Starting application..."
-        exec /usr/local/bin/start.sh
+    # Use default image entrypoint - do NOT override command
     environment:
       - APP_NAME=${APP_NAME:-PlayTube}
       - APP_ENV=production
       - APP_KEY=${APP_KEY}
-      - APP_DEBUG=false
-      # APP_URL: Set to actual Phala endpoint after deployment
-      # e.g., https://<app-id>-8080.dstack-prod5.phala.network
+      # TEMPORARY: Enable debug to see 500 error stacktrace in logs
+      - APP_DEBUG=${APP_DEBUG:-true}
       - APP_URL=${APP_URL:-http://localhost}
       
+      # Logging - output to stderr for Phala log visibility
+      - LOG_CHANNEL=${LOG_CHANNEL:-stderr}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      
       # Proxy & HTTPS (for Phala Cloud / reverse proxy)
-      # Phala gateway handles TLS, app trusts X-Forwarded-* headers
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-*}
-      # Disable forced HTTPS until endpoint is confirmed working
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
       
       # Database (force mysql, not sqlite)
@@ -54,13 +42,18 @@ services:
       - DB_USERNAME=${DB_USERNAME:-playtube}
       - DB_PASSWORD=${DB_PASSWORD:-change_this_db_password}
       
-      # Queue & Cache (all Redis)
-      - QUEUE_CONNECTION=redis
-      - CACHE_DRIVER=redis
-      - CACHE_STORE=redis
-      - SESSION_DRIVER=redis
+      # Cache & Session - FILE based (no Redis dependency)
+      # This avoids "Class Redis not found" error
+      - CACHE_DRIVER=file
+      - CACHE_STORE=file
+      - SESSION_DRIVER=file
       - SESSION_SECURE_COOKIE=${SESSION_SECURE_COOKIE:-false}
-      - REDIS_CLIENT=phpredis
+      
+      # Queue - SYNC mode (no Redis dependency)
+      # Jobs run immediately without queue worker
+      - QUEUE_CONNECTION=sync
+      
+      # Redis config (kept for future use, but not active)
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
       
@@ -77,8 +70,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       video-server:
         condition: service_healthy
     networks:
@@ -92,99 +83,29 @@ services:
       retries: 10
 
   # ==========================================
-  # Queue Worker (High Priority)
-  # Handles video processing jobs
+  # Queue Workers - DISABLED until Redis extension installed
+  # Uncomment when image has phpredis and change QUEUE_CONNECTION=redis
   # ==========================================
-  worker-high:
-    image: ${DOCKER_IMAGE:-mpratamamail/playtube:latest}
-    container_name: playtube-worker-high
-    restart: unless-stopped
-    command: php artisan queue:work redis --queue=high --sleep=1 --tries=3 --timeout=3600
-    environment:
-      - APP_NAME=${APP_NAME:-PlayTube}
-      - APP_ENV=production
-      - APP_KEY=${APP_KEY}
-      - APP_DEBUG=false
-      - APP_URL=${APP_URL}
-      # Force mysql connection
-      - DB_CONNECTION=mysql
-      - DB_HOST=${DB_HOST:-db}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_DATABASE=${DB_DATABASE:-playtube}
-      - DB_USERNAME=${DB_USERNAME:-playtube}
-      - DB_PASSWORD=${DB_PASSWORD:-change_this_db_password}
-      - QUEUE_CONNECTION=redis
-      - CACHE_DRIVER=redis
-      - CACHE_STORE=redis
-      - REDIS_CLIENT=phpredis
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - VIDEO_DELIVERY_DRIVER=nginx
-      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
-    volumes:
-      - playtube-storage:/var/www/html/storage
-      - playtube-logs:/var/www/html/storage/logs
-    depends_on:
-      app:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      video-server:
-        condition: service_healthy
-    networks:
-      - playtube-network
-
-  # ==========================================
-  # Queue Worker (Default Priority)
-  # Handles general background jobs
-  # ==========================================
-  worker-default:
-    image: ${DOCKER_IMAGE:-mpratamamail/playtube:latest}
-    container_name: playtube-worker-default
-    restart: unless-stopped
-    command: php artisan queue:work redis --queue=default,low --sleep=3 --tries=3 --timeout=1800
-    environment:
-      - APP_NAME=${APP_NAME:-PlayTube}
-      - APP_ENV=production
-      - APP_KEY=${APP_KEY}
-      - APP_DEBUG=false
-      - APP_URL=${APP_URL}
-      # Force mysql connection
-      - DB_CONNECTION=mysql
-      - DB_HOST=${DB_HOST:-db}
-      - DB_PORT=${DB_PORT:-3306}
-      - DB_DATABASE=${DB_DATABASE:-playtube}
-      - DB_USERNAME=${DB_USERNAME:-playtube}
-      - DB_PASSWORD=${DB_PASSWORD:-change_this_db_password}
-      - QUEUE_CONNECTION=redis
-      - CACHE_DRIVER=redis
-      - CACHE_STORE=redis
-      - REDIS_CLIENT=phpredis
-      - REDIS_HOST=${REDIS_HOST:-redis}
-      - VIDEO_SERVER_URL=${VIDEO_SERVER_URL:-http://video-server:8090}
-    volumes:
-      - playtube-storage:/var/www/html/storage
-      - playtube-logs:/var/www/html/storage/logs
-    depends_on:
-      app:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      video-server:
-        condition: service_healthy
-    networks:
-      - playtube-network
+  # worker-high:
+  #   image: ${DOCKER_IMAGE:-mpratamamail/playtube:latest}
+  #   container_name: playtube-worker-high
+  #   command: php artisan queue:work redis --queue=high --sleep=1 --tries=3 --timeout=3600
+  #   ...
+  
+  # worker-default:
+  #   image: ${DOCKER_IMAGE:-mpratamamail/playtube:latest}
+  #   container_name: playtube-worker-default
+  #   command: php artisan queue:work redis --queue=default,low --sleep=3 --tries=3 --timeout=1800
+  #   ...
 
   # ==========================================
   # Go Video Streaming Server (High Performance)
-  # Handles video streaming for regular videos and shorts
-  # NOTE: Internal only - no host port binding (accessed via docker network)
+  # NOTE: Internal only - no host port binding
   # ==========================================
   video-server:
     image: ${VIDEO_SERVER_IMAGE:-mpratamamail/playtube-video-server:latest}
     container_name: playtube-video-server
     restart: unless-stopped
-    # No ports exposed to host - internal network only
-    # App/workers access via http://video-server:8090
     environment:
       - VIDEO_SERVER_PORT=8090
       - VIDEO_BASE_PATH=/data/videos
@@ -206,7 +127,8 @@ services:
       retries: 10
 
   # ==========================================
-  # Redis (Cache & Queue)
+  # Redis - OPTIONAL (kept for future use)
+  # Currently not used as driver since phpredis not in image
   # ==========================================
   redis:
     image: redis:7-alpine
@@ -234,7 +156,6 @@ services:
     environment:
       - MYSQL_DATABASE=${DB_DATABASE:-playtube}
       - MYSQL_USER=${DB_USERNAME:-playtube}
-      # IMPORTANT: Non-empty defaults to prevent startup failure
       - MYSQL_PASSWORD=${DB_PASSWORD:-change_this_db_password}
       - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-change_this_root_password}
     volumes:
