@@ -266,17 +266,15 @@ class Video extends Model
     /**
      * Get the video stream URL with Range request support (for smooth seeking).
      * Uses relative URL to work properly with reverse proxies and tunnels.
-     * 
-     * Always returns a URL if uuid exists - let the controller handle 404 for debugging.
-     * This prevents blank video players when Storage::exists() has issues.
      */
     public function getStreamUrlAttribute(): string
     {
-        // Always return URL if we have a uuid - controller will 404 if file missing
-        if ($this->uuid) {
-            return '/stream/' . $this->uuid;
+        if (!$this->uuid) {
+            return '';
         }
-        return '';
+        
+        // Always use relative URL for same-origin streaming
+        return '/stream/' . $this->uuid;
     }
 
     /**

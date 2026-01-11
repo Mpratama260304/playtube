@@ -162,6 +162,9 @@ func main() {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		
+		// In development, allow all origins (GitHub Codespaces, localhost, etc.)
+		// Check if origin matches allowed list or contains github.dev/codespaces patterns
 		allowed := false
 		for _, o := range config.AllowedOrigins {
 			if o == origin || o == "*" {
@@ -169,17 +172,26 @@ func corsMiddleware(next http.Handler) http.Handler {
 				break
 			}
 		}
-
-		if allowed || origin == "" {
-			if origin != "" {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-			} else {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
+		
+		// Also allow GitHub Codespaces and common dev patterns
+		if !allowed && origin != "" {
+			if strings.Contains(origin, "github.dev") || 
+			   strings.Contains(origin, "codespaces") ||
+			   strings.Contains(origin, "localhost") ||
+			   strings.Contains(origin, "127.0.0.1") {
+				allowed = true
 			}
 		}
 
+		// Set CORS headers
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Range, Accept, Accept-Encoding, Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Range, Accept, Accept-Encoding, Content-Type, Authorization, X-Requested-With")
 		w.Header().Set("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 
@@ -592,15 +604,26 @@ func findVideoFile(uuid, quality string) string {
 	var paths []string
 
 	if quality != "" {
-		// Quality-specific paths
+		// Quality-specific paths - check both public and private storage
 		paths = []string{
+			// Public storage (where uploaded videos are)
+			filepath.Join(config.PublicBasePath, uuid, quality+".mp4"),
+			filepath.Join(config.PublicBasePath, uuid, "renditions", quality+".mp4"),
+			filepath.Join(config.PublicBasePath, uuid+"-"+quality+".mp4"),
+			// Private storage
 			filepath.Join(config.VideoBasePath, uuid, quality+".mp4"),
 			filepath.Join(config.VideoBasePath, uuid, "renditions", quality+".mp4"),
 			filepath.Join(config.VideoBasePath, uuid+"-"+quality+".mp4"),
 		}
 	} else {
-		// Default paths (prefer stream-optimized)
+		// Default paths (prefer stream-optimized) - check both storages
 		paths = []string{
+			// Public storage first (where most videos are)
+			filepath.Join(config.PublicBasePath, uuid, "stream.mp4"),
+			filepath.Join(config.PublicBasePath, uuid, "original.mp4"),
+			filepath.Join(config.PublicBasePath, uuid+"-stream.mp4"),
+			filepath.Join(config.PublicBasePath, uuid+".mp4"),
+			// Private storage
 			filepath.Join(config.VideoBasePath, uuid, "stream.mp4"),
 			filepath.Join(config.VideoBasePath, uuid, "original.mp4"),
 			filepath.Join(config.VideoBasePath, uuid+"-stream.mp4"),
