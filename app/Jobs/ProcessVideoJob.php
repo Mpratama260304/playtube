@@ -96,9 +96,9 @@ class ProcessVideoJob implements ShouldQueue
                 Log::warning("FFmpeg not found, skipping thumbnail generation", ['video_id' => $this->video->id]);
             }
 
-            // Update video record - no HLS, just metadata
+            // Update video record - metadata only, stream MP4 handled separately
             $updateData = [
-                'processing_state' => 'ready',
+                'processing_state' => 'metadata_ready',
                 'processed_at' => now(),
                 'processing_error' => null,
             ];
@@ -113,15 +113,14 @@ class ProcessVideoJob implements ShouldQueue
 
             $this->video->update($updateData);
 
-            Log::info("Video processing completed (MP4 streaming ready)", [
+            Log::info("Video metadata extraction completed", [
                 'video_id' => $this->video->id,
                 'uuid' => $this->video->uuid,
                 'duration' => $duration,
                 'thumbnail' => $thumbnailPath,
             ]);
 
-            // Dispatch stream MP4 preparation for fast playback
-            dispatch(new PrepareStreamMp4Job($this->video))->onQueue('high');
+            // Don't dispatch PrepareStreamMp4Job here - controller handles it for immediate processing
 
         } catch (\Exception $e) {
             Log::error("Video processing failed (video still playable via MP4)", [
@@ -137,7 +136,8 @@ class ProcessVideoJob implements ShouldQueue
                 'processed_at' => now(),
             ]);
 
-            // Don't re-throw - video is still published and playable
+            // Re-throw so the controller knows it failed
+            throw $e;
         }
     }
 

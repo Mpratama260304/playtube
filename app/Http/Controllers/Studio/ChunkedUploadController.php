@@ -272,23 +272,82 @@ class ChunkedUploadController extends Controller
             // Generate thumbnail
             $this->videoService->generateThumbnailSync($video);
 
-            // Dispatch processing job
-            ProcessVideoJob::dispatch($video);
+            // Set status to processing immediately
+            $video->update([
+                'status' => 'processing',
+                'processing_state' => 'processing',
+            ]);
 
-            \Log::info('Chunked upload completed', [
+            \Log::info('Chunked upload completed - starting immediate processing', [
                 'upload_id' => $uploadId,
                 'video_id' => $video->id,
                 'uuid' => $uuid,
             ]);
 
+            // Process video IMMEDIATELY in background (no queue)
+            // Use dispatch_sync for immediate execution
+            try {
+                // Log processing start
+                \App\Models\VideoProcessingLog::create([
+                    'video_id' => $video->id,
+                    'job_type' => 'upload_complete',
+                    'status' => 'completed',
+                    'message' => 'Upload completed, starting immediate processing',
+                    'started_at' => now(),
+                    'completed_at' => now(),
+                ]);
+
+                // Process immediately - extract metadata
+                ProcessVideoJob::dispatchSync($video);
+                
+                // Refresh video to get updated status
+                $video->refresh();
+                
+                \Log::info('Video metadata extraction completed', [
+                    'video_id' => $video->id,
+                    'uuid' => $uuid,
+                ]);
+
+                // Now process stream MP4 (fast start) immediately
+                \App\Jobs\PrepareStreamMp4Job::dispatchSync($video);
+                
+                $video->refresh();
+                
+                \Log::info('Fast stream processing completed', [
+                    'video_id' => $video->id,
+                    'uuid' => $uuid,
+                    'stream_ready' => $video->stream_ready,
+                ]);
+
+                // Update final status
+                $video->update([
+                    'status' => 'published',
+                    'processing_state' => 'ready',
+                ]);
+
+            } catch (\Exception $e) {
+                \Log::error('Video processing failed', [
+                    'video_id' => $video->id,
+                    'error' => $e->getMessage(),
+                ]);
+                
+                // Video is still playable even if processing fails
+                $video->update([
+                    'status' => 'published',
+                    'processing_state' => 'failed',
+                    'processing_error' => $e->getMessage(),
+                ]);
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Video uploaded successfully! Processing will begin shortly.',
+                'message' => 'Video uploaded and processed successfully!',
                 'video' => [
                     'id' => $video->id,
                     'uuid' => $video->uuid,
                     'title' => $video->title,
-                    'status' => $video->status,
+                    'status' => $video->fresh()->status,
+                    'stream_ready' => $video->fresh()->stream_ready,
                 ],
                 'redirect' => route('studio.edit', $video),
             ]);
