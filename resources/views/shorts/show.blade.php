@@ -150,16 +150,18 @@
                     <video 
                         x-ref="video"
                         class="absolute inset-0 w-full h-full object-cover"
-                        :src="isActive ? short.streamUrl : ''"
+                        :src="short.streamUrl"
                         :poster="short.thumbnailUrl"
+                        preload="auto"
                         playsinline
                         webkit-playsinline
                         loop
                         :muted="$store.shorts.muted"
                         @click="togglePlay()"
-                        @loadstart="loading = true"
+                        @loadstart="loading = isActive"
                         @canplay="loading = false"
-                        @playing="loading = false"
+                        @playing="loading = false; playing = true"
+                        @pause="playing = false"
                     ></video>
                     
                     <!-- Loading spinner -->
@@ -646,7 +648,10 @@
                         this.isActive = (newIndex === this.index);
                         
                         if (this.isActive && !wasActive) {
-                            this.onBecomeActive();
+                            // Use nextTick to ensure DOM is updated with new src
+                            this.$nextTick(() => {
+                                this.onBecomeActive();
+                            });
                         } else if (!this.isActive && wasActive) {
                             this.onBecomeInactive();
                         }
@@ -664,18 +669,36 @@
                 
                 onBecomeActive() {
                     const video = this.$refs.video;
-                    if (!video) return;
+                    if (!video) {
+                        console.log('Video ref not found for index:', this.index);
+                        return;
+                    }
                     
                     this.loading = true;
                     video.currentTime = 0;
+                    video.muted = Alpine.store('shorts').muted;
                     
-                    video.play().then(() => {
-                        this.playing = true;
-                        this.loading = false;
-                    }).catch(() => {
-                        this.playing = false;
-                        this.loading = false;
-                    });
+                    // Try to play - video should already have src loaded
+                    const tryPlay = () => {
+                        const playPromise = video.play();
+                        if (playPromise !== undefined) {
+                            playPromise.then(() => {
+                                this.playing = true;
+                                this.loading = false;
+                            }).catch((e) => {
+                                console.log('Autoplay prevented:', e);
+                                this.playing = false;
+                                this.loading = false;
+                            });
+                        }
+                    };
+                    
+                    // If video is ready, play immediately, otherwise wait
+                    if (video.readyState >= 2) {
+                        tryPlay();
+                    } else {
+                        video.addEventListener('canplay', tryPlay, { once: true });
+                    }
                 },
                 
                 onBecomeInactive() {
