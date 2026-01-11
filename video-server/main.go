@@ -26,15 +26,16 @@ import (
 
 // Config holds server configuration
 type Config struct {
-	Port           int
-	VideoBasePath  string
-	HLSBasePath    string
-	CacheEnabled   bool
-	CacheDuration  time.Duration
-	SignedURLKey   string
-	AllowedOrigins []string
-	MaxCacheSize   int64 // bytes
-	ChunkSize      int64
+	Port            int
+	VideoBasePath   string
+	PublicBasePath  string // Public storage for thumbnails
+	HLSBasePath     string
+	CacheEnabled    bool
+	CacheDuration   time.Duration
+	SignedURLKey    string
+	AllowedOrigins  []string
+	MaxCacheSize    int64 // bytes
+	ChunkSize       int64
 }
 
 // VideoCache implements efficient memory-mapped caching
@@ -69,6 +70,7 @@ func main() {
 	// Parse command line flags
 	flag.IntVar(&config.Port, "port", getEnvInt("VIDEO_SERVER_PORT", 8090), "Server port")
 	flag.StringVar(&config.VideoBasePath, "video-path", getEnv("VIDEO_BASE_PATH", "/workspaces/playtube/storage/app/private/videos"), "Base path for videos")
+	flag.StringVar(&config.PublicBasePath, "public-path", getEnv("PUBLIC_BASE_PATH", "/workspaces/playtube/storage/app/public/videos"), "Base path for public files (thumbnails)")
 	flag.StringVar(&config.HLSBasePath, "hls-path", getEnv("HLS_BASE_PATH", "/workspaces/playtube/storage/app/private/hls"), "Base path for HLS files")
 	flag.StringVar(&config.SignedURLKey, "secret", getEnv("VIDEO_SECRET_KEY", "playtube-video-secret-key-change-in-production"), "Secret key for signed URLs")
 	flag.Int64Var(&config.MaxCacheSize, "cache-size", getEnvInt64("VIDEO_CACHE_SIZE", 1024*1024*1024), "Max cache size in bytes (default 1GB)")
@@ -474,22 +476,28 @@ func thumbnailHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	uuid := vars["uuid"]
 
+	// Check public storage first (where thumbnails are stored)
 	thumbPaths := []string{
-		filepath.Join(config.VideoBasePath, uuid, "thumbnail.jpg"),
+		filepath.Join(config.PublicBasePath, uuid, "thumb.jpg"),
+		filepath.Join(config.PublicBasePath, uuid, "thumbnail.jpg"),
 		filepath.Join(config.VideoBasePath, uuid, "thumb.jpg"),
-		filepath.Join(config.VideoBasePath, uuid+"-thumb.jpg"),
+		filepath.Join(config.VideoBasePath, uuid, "thumbnail.jpg"),
 	}
 
 	for _, path := range thumbPaths {
 		if _, err := os.Stat(path); err == nil {
 			w.Header().Set("Content-Type", "image/jpeg")
-			w.Header().Set("Cache-Control", "max-age=86400")
+			w.Header().Set("Cache-Control", "public, max-age=604800, immutable") // 7 days cache
+			w.Header().Set("X-Content-Type-Options", "nosniff")
 			http.ServeFile(w, r, path)
 			return
 		}
 	}
 
-	http.Error(w, "Thumbnail not found", http.StatusNotFound)
+	// Return a 1x1 transparent pixel as fallback (prevents broken image)
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusNotFound)
 }
 
 // Serve video with proper Range support

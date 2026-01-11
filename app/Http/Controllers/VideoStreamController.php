@@ -340,4 +340,38 @@ class VideoStreamController extends Controller
             default => 'video/mp4',
         };
     }
+
+    /**
+     * Serve thumbnail directly for high performance.
+     * Uses direct file serving without proxy overhead.
+     */
+    public function thumbnail(Request $request, string $uuid)
+    {
+        $disk = Storage::disk('public');
+        $thumbPath = "videos/{$uuid}/thumb.jpg";
+        
+        if ($disk->exists($thumbPath)) {
+            $fullPath = $disk->path($thumbPath);
+            
+            return response()->file($fullPath, [
+                'Content-Type' => 'image/jpeg',
+                'Cache-Control' => 'public, max-age=604800, immutable',
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
+        }
+
+        // Try thumbnail.jpg as fallback
+        $thumbPath2 = "videos/{$uuid}/thumbnail.jpg";
+        if ($disk->exists($thumbPath2)) {
+            $fullPath = $disk->path($thumbPath2);
+            
+            return response()->file($fullPath, [
+                'Content-Type' => 'image/jpeg',
+                'Cache-Control' => 'public, max-age=604800, immutable',
+            ]);
+        }
+
+        // Return 404 if not found
+        abort(404, 'Thumbnail not found');
+    }
 }

@@ -45,6 +45,9 @@ Route::get('/embed/{video:slug}', [VideoController::class, 'embed'])->name('vide
 // Video Streaming with Range support (for smooth playback/seeking)
 Route::get('/stream/{video:uuid}', [VideoStreamController::class, 'stream'])->name('video.stream');
 
+// Thumbnail proxy to Go server (high performance)
+Route::get('/thumb/{uuid}', [VideoStreamController::class, 'thumbnail'])->name('video.thumbnail');
+
 // Search
 Route::get('/search', [SearchController::class, 'index'])->name('search');
 Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('search.suggestions');

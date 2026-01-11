@@ -208,8 +208,8 @@ class Video extends Model
     }
 
     /**
-     * Check if video has a thumbnail path set (doesn't check file existence for performance).
-     * Use this for display logic - the thumbnail_url will handle missing files gracefully.
+     * Check if video has a thumbnail path set.
+     * No longer checks file existence - Go server handles 404s efficiently.
      */
     public function getHasThumbnailAttribute(): bool
     {
@@ -218,9 +218,8 @@ class Video extends Model
     }
 
     /**
-     * Get the thumbnail URL using relative path for proper production support.
-     * Returns the path directly without checking file existence for performance.
-     * Browser will show broken image if file doesn't exist (rare case).
+     * Get the thumbnail URL - uses Go server for high performance.
+     * Falls back to Laravel /storage path if Go server is disabled.
      */
     public function getThumbnailUrlAttribute(): ?string
     {
@@ -233,6 +232,11 @@ class Video extends Model
         // Check if it's an external URL
         if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//')) {
             return $path;
+        }
+
+        // Use Go server for thumbnails (fast, <10ms)
+        if (config('playtube.use_go_video_server') && $this->uuid) {
+            return '/thumb/' . $this->uuid;
         }
 
         return '/storage/' . $path;
