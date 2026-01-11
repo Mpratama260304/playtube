@@ -12,7 +12,7 @@
         @endif
         <div class="flex-1 min-w-0">
             <h1 class="text-base sm:text-xl font-bold text-white truncate">{{ $channel->name }}</h1>
-            <p class="text-gray-400 text-xs sm:text-sm truncate">@{{ $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
+            <p class="text-gray-400 text-xs sm:text-sm truncate">{{ '@' . $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
         </div>
         <a href="{{ route('channel.show', $channel->username) }}" class="hidden sm:block px-4 py-2 bg-gray-700 text-white text-sm rounded-lg hover:bg-gray-600 flex-shrink-0">
             View Channel

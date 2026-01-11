@@ -12,7 +12,7 @@
         @endif
         <div class="flex-1">
             <h1 class="text-xl font-bold text-white">{{ $channel->name }}</h1>
-            <p class="text-gray-400 text-sm">@{{ $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
+            <p class="text-gray-400 text-sm">{{ '@' . $channel->username }} • {{ number_format($channel->subscribers_count) }} subscribers</p>
         </div>
         <a href="{{ route('channel.show', $channel->username) }}" class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600">
             View Channel

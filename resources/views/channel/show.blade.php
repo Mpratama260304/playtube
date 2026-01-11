@@ -22,7 +22,7 @@
         <!-- Info -->
         <div class="flex-1 min-w-0">
             <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">{{ $channel->name }}</h1>
-            <p class="text-gray-400 text-sm sm:text-base">@{{ $channel->username }}</p>
+            <p class="text-gray-400 text-sm sm:text-base">{{ '@' . $channel->username }}</p>
             <div class="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-400 mt-1 sm:mt-2 flex-wrap">
                 <span>{{ number_format($subscribersCount) }} subscribers</span>
                 <span class="hidden sm:inline">•</span>
