@@ -75,7 +75,7 @@
                             preload="metadata"
                             poster="{{ $video->thumbnail_url }}"
                             data-video-id="{{ $video->id }}"
-                            data-stream-url="{{ route('video.stream', $video) }}"
+                            data-stream-url="{{ $video->stream_url }}"
                             controlslist="nodownload"
                             oncontextmenu="return false;"
                             x-on:canplay="videoReady = true"
@@ -84,7 +84,7 @@
                             x-on:error="videoReady = true; loadingText = 'Error'"
                             x-ref="videoPlayer"
                         >
-                            <source src="{{ route('video.stream', $video) }}" type="video/mp4">
+                            <source src="{{ $video->stream_url }}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
 
@@ -625,7 +625,7 @@
                 getQualityUrl(quality) {
                     // Always fallback to base stream URL for 'auto', 'original', or missing quality
                     if (quality === 'auto' || quality === 'original' || !this.availableQualities[quality]) {
-                        return '{{ route('video.stream', $video) }}';
+                        return '{{ $video->stream_url }}';
                     }
                     
                     return this.availableQualities[quality].url;
