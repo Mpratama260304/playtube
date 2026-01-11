@@ -60,6 +60,7 @@ Route::get('/category/{category:slug}', [CategoryController::class, 'show'])->na
 // Shorts
 Route::get('/shorts', [ShortsController::class, 'index'])->name('shorts.index');
 Route::get('/shorts/{video:slug}', [ShortsController::class, 'show'])->name('shorts.show');
+Route::post('/shorts/load-more', [ShortsController::class, 'loadMore'])->name('shorts.loadMore');
 
 // Channel
 Route::get('/channel/{user:username}', [ChannelController::class, 'show'])->name('channel.show');
