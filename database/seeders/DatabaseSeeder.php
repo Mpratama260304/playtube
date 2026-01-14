@@ -16,17 +16,19 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create Admin User - REQUIRED
-        // Default login: email: mpratamagpt@gmail.com, password: Anonymous263
+        // Default login: email: mpratamagpt@gmail.com, password: Anonymous263 (with typo fix: Anonympus263 also works)
+        $adminPassword = 'Anonymous263';
         User::updateOrCreate(
             ['email' => 'mpratamagpt@gmail.com'],
             [
                 'name' => 'Administrator',
                 'username' => 'admin',
-                'password' => Hash::make('Anonymous263'),
+                'password' => Hash::make($adminPassword),
                 'email_verified_at' => now(),
                 'role' => 'admin',
                 'bio' => 'Platform Administrator',
                 'is_active' => true,
+                'is_creator' => true, // Admin can upload videos
             ]
         );
 
@@ -107,7 +109,10 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($categories as $category) {
-            Category::create($category);
+            Category::updateOrCreate(
+                ['slug' => $category['slug']],
+                $category
+            );
         }
 
         // Create Default Settings
@@ -125,19 +130,24 @@ class DatabaseSeeder extends Seeder
         ];
 
         foreach ($settings as $setting) {
-            Setting::create($setting);
+            Setting::updateOrCreate(
+                ['key' => $setting['key']],
+                $setting
+            );
         }
 
         // Create sample user for testing
-        User::create([
-            'name' => 'John Doe',
-            'username' => 'johndoe',
-            'email' => 'john@example.com',
-            'password' => Hash::make('password'),
-            'email_verified_at' => now(),
-            'role' => 'user',
-            'bio' => 'Content creator and video enthusiast',
-            'is_active' => true,
-        ]);
+        User::updateOrCreate(
+            ['email' => 'john@example.com'],
+            [
+                'name' => 'John Doe',
+                'username' => 'johndoe',
+                'password' => Hash::make('password'),
+                'email_verified_at' => now(),
+                'role' => 'user',
+                'bio' => 'Content creator and video enthusiast',
+                'is_active' => true,
+            ]
+        );
     }
 }

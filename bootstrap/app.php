@@ -9,18 +9,20 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Parse PHP size string (e.g., "128M", "2G") to bytes
  */
-function parsePhpSize(string $size): int
-{
-    $size = trim($size);
-    $unit = strtoupper(substr($size, -1));
-    $value = (int) $size;
-    
-    return match ($unit) {
-        'G' => $value * 1024 * 1024 * 1024,
-        'M' => $value * 1024 * 1024,
-        'K' => $value * 1024,
-        default => $value,
-    };
+if (!function_exists('parsePhpSize')) {
+    function parsePhpSize(string $size): int
+    {
+        $size = trim($size);
+        $unit = strtoupper(substr($size, -1));
+        $value = (int) $size;
+        
+        return match ($unit) {
+            'G' => $value * 1024 * 1024 * 1024,
+            'M' => $value * 1024 * 1024,
+            'K' => $value * 1024,
+            default => $value,
+        };
+    }
 }
 
 return Application::configure(basePath: dirname(__DIR__))

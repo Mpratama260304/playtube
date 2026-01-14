@@ -47,9 +47,19 @@
                                             <div class="min-w-0 flex-1">
                                                 <p class="text-sm font-medium text-white truncate max-w-xs">{{ $video->title }}</p>
                                                 <p class="text-xs text-gray-400 mt-1">{{ Str::limit($video->description, 60) }}</p>
-                                                @if($video->category)
-                                                    <span class="inline-block mt-1 px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded">{{ $video->category->name }}</span>
-                                                @endif
+                                                <div class="flex items-center gap-1 mt-1">
+                                                    @if($video->isEmbed())
+                                                        <span class="inline-block px-2 py-0.5 text-xs bg-purple-900/50 text-purple-300 rounded flex items-center gap-1">
+                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                                            </svg>
+                                                            {{ $video->embed_platform_name }}
+                                                        </span>
+                                                    @endif
+                                                    @if($video->category)
+                                                        <span class="inline-block px-2 py-0.5 text-xs bg-gray-700 text-gray-300 rounded">{{ $video->category->name }}</span>
+                                                    @endif
+                                                </div>
                                             </div>
                                         </div>
                                     </td>

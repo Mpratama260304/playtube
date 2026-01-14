@@ -63,6 +63,12 @@ class Video extends Model
         'comments_count',
         'published_at',
         'processed_at',
+        // Embed video fields
+        'source_type',
+        'embed_url',
+        'embed_platform',
+        'embed_video_id',
+        'embed_iframe_url',
     ];
 
     protected $casts = [
@@ -296,8 +302,56 @@ class Video extends Model
      */
     public function hasPlayableFile(): bool
     {
+        // Embedded videos are always playable
+        if ($this->isEmbed()) {
+            return true;
+        }
+        
         $path = $this->playback_path;
         return $path && Storage::disk('public')->exists($path);
+    }
+
+    /**
+     * Check if this is an embedded video (not uploaded).
+     */
+    public function isEmbed(): bool
+    {
+        return $this->source_type === 'embed' && !empty($this->embed_iframe_url);
+    }
+
+    /**
+     * Check if this is an uploaded video.
+     */
+    public function isUpload(): bool
+    {
+        return $this->source_type !== 'embed';
+    }
+
+    /**
+     * Get the embed platform display name.
+     */
+    public function getEmbedPlatformNameAttribute(): ?string
+    {
+        if (!$this->embed_platform) {
+            return null;
+        }
+        
+        $platforms = [
+            'youtube' => 'YouTube',
+            'dailymotion' => 'Dailymotion',
+            'vimeo' => 'Vimeo',
+            'googledrive' => 'Google Drive',
+            'facebook' => 'Facebook',
+            'twitter' => 'Twitter/X',
+            'streamable' => 'Streamable',
+            'twitch' => 'Twitch',
+            'tiktok' => 'TikTok',
+            'rumble' => 'Rumble',
+            'bitchute' => 'BitChute',
+            'odysee' => 'Odysee',
+        ];
+        
+        return $platforms[$this->embed_platform] ?? ucfirst($this->embed_platform);
     }
 
     /**

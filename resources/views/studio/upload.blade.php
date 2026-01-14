@@ -2,7 +2,16 @@
     <x-slot name="title">Upload Video - {{ config('app.name') }}</x-slot>
 
     <div class="max-w-3xl mx-auto" x-data="uploadForm()">
-        <h1 class="text-2xl font-bold text-white mb-8">Upload Video</h1>
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-2xl font-bold text-white">Upload Video</h1>
+            <a href="{{ route('studio.embed') }}" 
+               class="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                Embed from URL
+            </a>
+        </div>
 
         @if(!$isCreator)
         <!-- Creator Access Required Modal -->

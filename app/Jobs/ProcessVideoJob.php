@@ -216,26 +216,67 @@ class ProcessVideoJob implements ShouldQueue
 
     /**
      * Find the path to an executable.
+     * Supports multiple environments: standard Linux, macOS, Replit, Docker, Codespaces
      */
     protected function findExecutable(string $name): ?string
     {
+        // Check environment variable first (for custom installations)
+        $envKey = strtoupper($name) . '_PATH';
+        $envPath = env($envKey);
+        if ($envPath && file_exists($envPath) && is_executable($envPath)) {
+            return $envPath;
+        }
+
+        // Common paths across different environments
         $paths = [
+            // Standard Linux
             "/usr/bin/{$name}",
             "/usr/local/bin/{$name}",
+            // macOS Homebrew
             "/opt/homebrew/bin/{$name}",
+            "/usr/local/Cellar/ffmpeg/*/bin/{$name}",
+            // Replit / Nix
+            "/nix/store/*-ffmpeg-*/bin/{$name}",
+            "/home/runner/.nix-profile/bin/{$name}",
+            getenv('HOME') . "/.nix-profile/bin/{$name}",
+            // Docker/Alpine
+            "/usr/local/ffmpeg/bin/{$name}",
+            // Render.com
+            "/opt/render/project/ffmpeg/bin/{$name}",
+            // Railway
+            "/app/.apt/usr/bin/{$name}",
         ];
 
-        foreach ($paths as $path) {
-            if (file_exists($path) && is_executable($path)) {
-                return $path;
+        foreach ($paths as $pattern) {
+            // Handle glob patterns (for nix store paths)
+            if (str_contains($pattern, '*')) {
+                $matches = glob($pattern);
+                if (!empty($matches)) {
+                    foreach ($matches as $match) {
+                        if (file_exists($match) && is_executable($match)) {
+                            return $match;
+                        }
+                    }
+                }
+            } elseif (file_exists($pattern) && is_executable($pattern)) {
+                return $pattern;
             }
         }
 
-        // Try which command
+        // Try which command as fallback
         $which = trim(shell_exec("which {$name} 2>/dev/null") ?? '');
         if ($which && file_exists($which)) {
             return $which;
         }
+
+        // Try command -v (more portable)
+        $commandV = trim(shell_exec("command -v {$name} 2>/dev/null") ?? '');
+        if ($commandV && file_exists($commandV)) {
+            return $commandV;
+        }
+
+        // Log for debugging
+        Log::debug("Executable not found", ['name' => $name, 'searched_paths' => $paths]);
 
         return null;
     }

@@ -9,6 +9,7 @@ use App\Http\Controllers\ShortsController;
 use App\Http\Controllers\ChannelController;
 use App\Http\Controllers\Studio\StudioController;
 use App\Http\Controllers\Studio\ChunkedUploadController;
+use App\Http\Controllers\Studio\EmbedController;
 use App\Http\Controllers\LibraryController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\NotificationController;
@@ -92,6 +93,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/upload', [StudioController::class, 'upload'])->name('upload');
         Route::post('/upload', [StudioController::class, 'store'])->name('store');
         Route::post('/upload/ajax', [StudioController::class, 'ajaxStore'])->name('store.ajax');
+        
+        // Embed video routes
+        Route::get('/embed', [EmbedController::class, 'create'])->name('embed');
+        Route::post('/embed/parse', [EmbedController::class, 'parse'])->name('embed.parse');
+        Route::post('/embed/store', [EmbedController::class, 'store'])->name('embed.store');
         
         // Chunked upload endpoints (for large files / proxy bypass)
         Route::post('/upload/chunked/init', [ChunkedUploadController::class, 'init'])->name('chunked.init');

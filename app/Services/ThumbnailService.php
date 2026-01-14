@@ -95,13 +95,27 @@ class ThumbnailService
 
     /**
      * Find FFmpeg executable path.
+     * Supports multiple environments: standard Linux, macOS, Replit, Docker, Codespaces
      */
     protected function findFfmpeg(): ?string
     {
+        // Check environment variable first
+        $envPath = env('FFMPEG_PATH');
+        if ($envPath && file_exists($envPath) && is_executable($envPath)) {
+            return $envPath;
+        }
+
         $paths = [
+            // Standard Linux
             '/usr/bin/ffmpeg',
             '/usr/local/bin/ffmpeg',
+            // macOS Homebrew
             '/opt/homebrew/bin/ffmpeg',
+            // Replit / Nix
+            getenv('HOME') . '/.nix-profile/bin/ffmpeg',
+            '/home/runner/.nix-profile/bin/ffmpeg',
+            // Docker/Alpine
+            '/usr/local/ffmpeg/bin/ffmpeg',
         ];
 
         foreach ($paths as $path) {
@@ -110,8 +124,24 @@ class ThumbnailService
             }
         }
 
+        // Try Nix store paths (Replit)
+        $nixMatches = glob('/nix/store/*-ffmpeg-*/bin/ffmpeg');
+        if (!empty($nixMatches)) {
+            foreach ($nixMatches as $match) {
+                if (is_executable($match)) {
+                    return $match;
+                }
+            }
+        }
+
         // Try 'which' command as last resort
         exec('which ffmpeg 2>/dev/null', $output, $returnCode);
+        if ($returnCode === 0 && !empty($output[0])) {
+            return trim($output[0]);
+        }
+
+        // Try 'command -v' (more portable)
+        exec('command -v ffmpeg 2>/dev/null', $output, $returnCode);
         if ($returnCode === 0 && !empty($output[0])) {
             return trim($output[0]);
         }

@@ -184,25 +184,54 @@ class VideoService
 
     /**
      * Find FFmpeg/FFprobe executable
+     * Supports multiple environments: standard Linux, macOS, Replit, Docker, Codespaces
      */
     protected function findExecutable(string $name): ?string
     {
+        // Check environment variable first
+        $envKey = strtoupper($name) . '_PATH';
+        $envPath = env($envKey);
+        if ($envPath && file_exists($envPath) && is_executable($envPath)) {
+            return $envPath;
+        }
+
         $paths = [
             '/usr/bin/' . $name,
             '/usr/local/bin/' . $name,
             '/opt/homebrew/bin/' . $name,
-            $name, // PATH
+            // Replit / Nix
+            getenv('HOME') . '/.nix-profile/bin/' . $name,
+            '/home/runner/.nix-profile/bin/' . $name,
+            // Docker/Alpine
+            '/usr/local/ffmpeg/bin/' . $name,
         ];
 
         foreach ($paths as $path) {
-            if ($path === $name) {
-                exec("which {$name}", $output, $returnCode);
-                if ($returnCode === 0 && !empty($output[0])) {
-                    return trim($output[0]);
-                }
-            } elseif (file_exists($path) && is_executable($path)) {
+            if (file_exists($path) && is_executable($path)) {
                 return $path;
             }
+        }
+
+        // Try Nix store paths (Replit)
+        $nixMatches = glob("/nix/store/*-ffmpeg-*/bin/{$name}");
+        if (!empty($nixMatches)) {
+            foreach ($nixMatches as $match) {
+                if (is_executable($match)) {
+                    return $match;
+                }
+            }
+        }
+
+        // Try which command
+        exec("which {$name}", $output, $returnCode);
+        if ($returnCode === 0 && !empty($output[0])) {
+            return trim($output[0]);
+        }
+
+        // Try command -v (more portable)
+        exec("command -v {$name} 2>/dev/null", $output2, $returnCode2);
+        if ($returnCode2 === 0 && !empty($output2[0])) {
+            return trim($output2[0]);
         }
 
         return null;
