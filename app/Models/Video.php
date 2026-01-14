@@ -283,14 +283,39 @@ class Video extends Model
                 return null;
                 
             case 'googledrive':
-                // Google Drive thumbnails require authentication, use a generated placeholder
-                return "https://drive.google.com/thumbnail?id={$videoId}&sz=w640";
+                // Primary: lh3.googleusercontent.com (works without auth for public files)
+                return "https://lh3.googleusercontent.com/d/{$videoId}=w640";
                 
             case 'streamable':
                 return "https://cdn-cf-east.streamable.com/image/{$videoId}.jpg";
                 
             case 'twitch':
                 return "https://static-cdn.jtvnw.net/cf_vods/{$videoId}/thumb/thumb0-640x360.jpg";
+                
+            default:
+                return null;
+        }
+    }
+
+    /**
+     * Get fallback thumbnail URL for embedded videos.
+     * Used when primary thumbnail fails to load.
+     */
+    public function getEmbedThumbnailFallbackUrl(): ?string
+    {
+        if (!$this->isEmbed() || !$this->embed_video_id) {
+            return null;
+        }
+
+        $videoId = $this->embed_video_id;
+
+        switch ($this->embed_platform) {
+            case 'youtube':
+                return "https://img.youtube.com/vi/{$videoId}/hqdefault.jpg";
+                
+            case 'googledrive':
+                // Fallback: drive.google.com/thumbnail
+                return "https://drive.google.com/thumbnail?id={$videoId}&sz=w640";
                 
             default:
                 return null;

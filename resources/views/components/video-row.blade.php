@@ -14,7 +14,11 @@
                 loading="lazy"
                 decoding="async"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                @if($video->isEmbed() && $video->embed_platform === 'googledrive' && $video->embed_video_id)
+                onerror="if(!this.dataset.tried){this.dataset.tried='1';this.src='https://drive.google.com/thumbnail?id={{ $video->embed_video_id }}&sz=w640';}else{this.style.display='none';}"
+                @else
                 onerror="this.style.display='none';"
+                @endif
             >
         @else
             <div class="w-full h-full flex items-center justify-center">

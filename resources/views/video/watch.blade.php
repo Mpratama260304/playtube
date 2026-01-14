@@ -46,35 +46,35 @@
                 <!-- Video Player Container - Full width on mobile -->
                 <div class="relative w-full aspect-video bg-black sm:rounded-xl overflow-hidden mb-3" id="video-player-container">
                     @if($video->isEmbed())
-                        {{-- Embedded Video Player with platform UI overlay protection --}}
-                        <div class="relative w-full h-full embed-container {{ $video->embed_platform === 'googledrive' ? 'embed-googledrive' : '' }}">
-                            {{-- Overlay to hide platform UI elements (Google Drive logo, popup button) --}}
-                            @if($video->embed_platform === 'googledrive')
-                                {{-- Top-left overlay to hide "Google Drive" text --}}
-                                <div class="absolute top-0 left-0 w-40 h-12 bg-black z-20 pointer-events-none"></div>
-                                {{-- Top-right overlay to hide popup button --}}
-                                <div class="absolute top-0 right-0 w-16 h-12 bg-black z-20 pointer-events-none"></div>
-                                {{-- Bottom overlay for additional branding --}}
-                                <div class="absolute bottom-0 left-0 w-full h-10 bg-gradient-to-t from-black/80 to-transparent z-10 pointer-events-none"></div>
-                            @endif
-                            
-                            <iframe
-                                src="{{ $video->embed_iframe_url }}"
-                                class="w-full h-full"
-                                frameborder="0"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                allowfullscreen
-                                loading="lazy"
-                                referrerpolicy="no-referrer"
-                                sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-                            ></iframe>
-                            
-                            {{-- Invisible click blockers for corners (prevents redirect to original source) --}}
-                            @if($video->embed_platform === 'googledrive')
-                                <div class="absolute top-0 left-0 w-40 h-12 z-30" onclick="return false;"></div>
-                                <div class="absolute top-0 right-0 w-16 h-12 z-30" onclick="return false;"></div>
-                            @endif
-                        </div>
+                        {{-- Embedded Video Player --}}
+                        @if($video->embed_platform === 'googledrive')
+                            {{-- Google Drive specific embed with clean responsive layout --}}
+                            <div class="embed-drive">
+                                <iframe
+                                    src="{{ $video->embed_iframe_url }}"
+                                    allow="autoplay; encrypted-media; picture-in-picture"
+                                    allowfullscreen
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer-when-downgrade"
+                                ></iframe>
+                                {{-- Invisible overlays to block Google Drive's "open in new" button --}}
+                                <div class="gd-overlay-top-right" aria-hidden="true"></div>
+                                <div class="gd-overlay-top-left" aria-hidden="true"></div>
+                            </div>
+                        @else
+                            {{-- Other platform embeds --}}
+                            <div class="relative w-full h-full embed-container">
+                                <iframe
+                                    src="{{ $video->embed_iframe_url }}"
+                                    class="w-full h-full"
+                                    frameborder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowfullscreen
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer"
+                                ></iframe>
+                            </div>
+                        @endif
                     @elseif($video->original_path)
                         {{-- Loading Skeleton - shows until video can play --}}
                         <div 

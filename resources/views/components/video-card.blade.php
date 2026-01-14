@@ -12,7 +12,11 @@
                     loading="lazy"
                     decoding="async"
                     class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    @if($video->isEmbed() && $video->embed_platform === 'googledrive' && $video->embed_video_id)
+                    onerror="if(!this.dataset.tried){this.dataset.tried='1';this.src='https://drive.google.com/thumbnail?id={{ $video->embed_video_id }}&sz=w640';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}"
+                    @else
                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                    @endif
                 >
                 {{-- Fallback shown on image load error --}}
                 <div class="w-full h-full items-center justify-center absolute inset-0" style="display: none;">

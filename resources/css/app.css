@@ -500,48 +500,73 @@
     }
     
     /* ===================================
-       Embed Video Overlay Protection
-       Hides platform branding/buttons
+       Embed Video Styles
        =================================== */
+    
+    /* Generic embed container */
     .embed-container {
         position: relative;
         overflow: hidden;
     }
     
-    /* Google Drive specific styling */
-    .embed-googledrive iframe {
-        /* Slightly scale up to help hide edge elements */
-        transform: scale(1.02);
-        transform-origin: center center;
-    }
-    
-    /* Prevent right-click on embed containers */
     .embed-container iframe {
         pointer-events: auto;
     }
     
-    .embed-container::before,
-    .embed-container::after {
-        content: '';
+    /* Google Drive specific embed - clean and responsive */
+    .embed-drive {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        background-color: #000;
+        border-radius: 0.75rem;
+    }
+    
+    @media (max-width: 639px) {
+        .embed-drive {
+            border-radius: 0;
+        }
+    }
+    
+    .embed-drive iframe {
         position: absolute;
-        z-index: 25;
-        pointer-events: none;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
     }
     
-    /* Google Drive - hide top corners more precisely */
-    .embed-googledrive::before {
-        top: 0;
-        left: 0;
-        width: 180px;
-        height: 50px;
-        background: linear-gradient(135deg, #000 60%, transparent 100%);
-    }
-    
-    .embed-googledrive::after {
+    /* Google Drive overlay covers - hide Google's "open in new" button */
+    .embed-drive .gd-overlay-top-right {
+        position: absolute;
         top: 0;
         right: 0;
-        width: 80px;
+        width: 60px;
+        height: 60px;
+        z-index: 50;
+        background: transparent;
+        cursor: default;
+    }
+    
+    .embed-drive .gd-overlay-top-left {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 200px;
         height: 50px;
-        background: linear-gradient(-135deg, #000 60%, transparent 100%);
+        z-index: 50;
+        background: transparent;
+        cursor: default;
+    }
+    
+    /* Fallback: hide any injected external links inside embed-drive */
+    .embed-drive a[target="_blank"],
+    .embed-drive a[href*="drive.google.com"],
+    .embed-drive a[href*="docs.google.com"],
+    .embed-drive a[href*="googleusercontent.com"] {
+        display: none !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
     }
 }

@@ -195,6 +195,44 @@
                     </label>
                 </div>
 
+                <!-- Custom Thumbnail Upload -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Custom Thumbnail (Optional)</label>
+                    <div class="flex items-center space-x-4">
+                        <div class="w-40 aspect-video bg-gray-800 rounded-lg overflow-hidden">
+                            <template x-if="thumbnailPreview">
+                                <img :src="thumbnailPreview" alt="Custom thumbnail" class="w-full h-full object-cover">
+                            </template>
+                            <template x-if="!thumbnailPreview && parsedData?.thumbnail_url">
+                                <img :src="parsedData.thumbnail_url" alt="Auto thumbnail" class="w-full h-full object-cover opacity-60">
+                            </template>
+                            <template x-if="!thumbnailPreview && !parsedData?.thumbnail_url">
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                </div>
+                            </template>
+                        </div>
+                        <div>
+                            <label class="px-4 py-2 bg-gray-700 text-white rounded-lg cursor-pointer hover:bg-gray-600 transition-colors inline-block">
+                                <span x-text="thumbnailFile ? 'Change' : 'Upload Thumbnail'"></span>
+                                <input type="file" 
+                                       accept="image/jpeg,image/png,image/webp"
+                                       class="hidden"
+                                       @change="handleThumbnailSelect($event)">
+                            </label>
+                            <button type="button" 
+                                    x-show="thumbnailFile" 
+                                    @click="clearThumbnail()"
+                                    class="ml-2 px-3 py-2 text-red-400 hover:text-red-300 text-sm">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">Upload a custom thumbnail to avoid black first-frame on embeds. JPG, PNG, WebP (max 50MB)</p>
+                </div>
+
                 <!-- Submit Error -->
                 <div x-show="submitError" x-cloak class="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-500 text-sm" x-text="submitError"></div>
 
@@ -244,12 +282,39 @@
                     visibility: 'public',
                     is_short: false,
                 },
+                thumbnailFile: null,
+                thumbnailPreview: null,
                 parsedData: null,
                 parsing: false,
                 parseError: '',
                 submitting: false,
                 submitError: '',
                 parseTimeout: null,
+
+                handleThumbnailSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        // Validate file type
+                        const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+                        if (!validTypes.includes(file.type)) {
+                            this.submitError = 'Invalid file type. Please use JPG, PNG, or WebP.';
+                            return;
+                        }
+                        // Validate file size (50MB)
+                        if (file.size > 50 * 1024 * 1024) {
+                            this.submitError = 'File too large. Maximum size is 50MB.';
+                            return;
+                        }
+                        this.thumbnailFile = file;
+                        this.thumbnailPreview = URL.createObjectURL(file);
+                        this.submitError = '';
+                    }
+                },
+
+                clearThumbnail() {
+                    this.thumbnailFile = null;
+                    this.thumbnailPreview = null;
+                },
 
                 debounceParseUrl() {
                     clearTimeout(this.parseTimeout);
@@ -304,14 +369,28 @@
                     this.submitError = '';
 
                     try {
+                        // Use FormData to support file upload
+                        const formData = new FormData();
+                        formData.append('url', this.formData.url);
+                        formData.append('title', this.formData.title);
+                        formData.append('description', this.formData.description || '');
+                        formData.append('category_id', this.formData.category_id || '');
+                        formData.append('tags', this.formData.tags || '');
+                        formData.append('visibility', this.formData.visibility);
+                        formData.append('is_short', this.formData.is_short ? '1' : '0');
+                        
+                        // Add thumbnail file if selected
+                        if (this.thumbnailFile) {
+                            formData.append('thumbnail', this.thumbnailFile);
+                        }
+
                         const response = await fetch('{{ route("studio.embed.store") }}', {
                             method: 'POST',
                             headers: {
-                                'Content-Type': 'application/json',
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
                                 'Accept': 'application/json'
                             },
-                            body: JSON.stringify(this.formData)
+                            body: formData
                         });
 
                         const data = await response.json();

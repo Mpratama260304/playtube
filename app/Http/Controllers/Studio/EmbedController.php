@@ -90,6 +90,7 @@ class EmbedController extends Controller
             'tags' => 'nullable|string|max:500',
             'visibility' => 'required|in:public,unlisted,private',
             'is_short' => 'nullable|boolean',
+            'thumbnail' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:51200', // 50MB max
         ]);
 
         // Parse the embed URL
@@ -105,9 +106,13 @@ class EmbedController extends Controller
         try {
             $uuid = (string) Str::uuid();
             
-            // Try to download thumbnail
+            // Handle thumbnail: user upload takes priority over auto-download
             $thumbnailPath = null;
-            if ($embedData['thumbnail_url']) {
+            if ($request->hasFile('thumbnail')) {
+                // User uploaded custom thumbnail
+                $thumbnailPath = $request->file('thumbnail')->store('thumbnails', 'public');
+            } elseif ($embedData['thumbnail_url']) {
+                // Try to download thumbnail from embed platform
                 $thumbnailPath = $this->embedService->downloadThumbnail($embedData['thumbnail_url'], $uuid);
             }
 
