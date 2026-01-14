@@ -4,7 +4,7 @@
 <div class="group w-full min-w-0 overflow-hidden">
     <a href="{{ route('video.watch', $video->slug) }}" class="block">
         <!-- Thumbnail - Full width, aspect-video -->
-        <div class="relative w-full aspect-video bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden mb-2">
+        <div class="relative w-full aspect-video bg-gradient-to-br from-gray-700 to-gray-900 rounded-lg overflow-hidden mb-2">
             @if($video->has_thumbnail)
                 <img 
                     src="{{ $video->thumbnail_url }}" 
@@ -12,12 +12,29 @@
                     loading="lazy"
                     decoding="async"
                     class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                 >
+                {{-- Fallback shown on image load error --}}
+                <div class="w-full h-full items-center justify-center absolute inset-0" style="display: none;">
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                </div>
             @else
                 <div class="w-full h-full flex items-center justify-center">
-                    <svg class="w-10 h-10 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
+                </div>
+            @endif
+
+            <!-- Embed Platform Badge -->
+            @if($video->isEmbed() && $video->embed_platform)
+                <div class="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 text-white text-[9px] font-medium rounded flex items-center gap-1">
+                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                    </svg>
+                    {{ $video->embed_platform_name }}
                 </div>
             @endif
 

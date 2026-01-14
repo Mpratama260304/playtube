@@ -143,6 +143,10 @@ php artisan storage:link --force 2>/dev/null || true
 echo "==> Running migrations..."
 php artisan migrate --force 2>/dev/null || true
 
+# Run seeders to create admin user and default data
+echo "==> Running database seeders..."
+php artisan db:seed --force 2>/dev/null || true
+
 # Cache config (optional, skip errors)
 echo "==> Caching configuration..."
 php artisan config:clear 2>/dev/null || true

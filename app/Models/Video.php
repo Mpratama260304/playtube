@@ -215,37 +215,86 @@ class Video extends Model
 
     /**
      * Check if video has a thumbnail path set.
-     * No longer checks file existence - Go server handles 404s efficiently.
+     * For embedded videos, we always have a thumbnail (either local or generated from platform).
      */
     public function getHasThumbnailAttribute(): bool
     {
         $path = $this->normalized_thumbnail_path;
-        return $path !== null && $path !== '';
+        if ($path !== null && $path !== '') {
+            return true;
+        }
+        
+        // Embedded videos can generate thumbnails from the platform
+        if ($this->isEmbed() && $this->embed_platform && $this->embed_video_id) {
+            return true;
+        }
+        
+        return false;
     }
 
     /**
      * Get the thumbnail URL - uses Go server for high performance.
      * Falls back to Laravel /storage path if Go server is disabled.
+     * For embedded videos, generates platform-specific thumbnail URL.
      */
     public function getThumbnailUrlAttribute(): ?string
     {
         $path = $this->normalized_thumbnail_path;
         
-        if (!$path) {
-            return null;
+        if ($path) {
+            // Check if it's an external URL
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//')) {
+                return $path;
+            }
+
+            // Use Go server for thumbnails (fast, <10ms)
+            if (config('playtube.use_go_video_server') && $this->uuid) {
+                return '/thumb/' . $this->uuid;
+            }
+
+            return '/storage/' . $path;
         }
         
-        // Check if it's an external URL
-        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://') || str_starts_with($path, '//')) {
-            return $path;
+        // For embedded videos without local thumbnail, generate platform thumbnail URL
+        if ($this->isEmbed() && $this->embed_platform && $this->embed_video_id) {
+            return $this->getEmbedThumbnailUrl();
         }
 
-        // Use Go server for thumbnails (fast, <10ms)
-        if (config('playtube.use_go_video_server') && $this->uuid) {
-            return '/thumb/' . $this->uuid;
+        return null;
+    }
+    
+    /**
+     * Get the thumbnail URL for embedded videos from their platform.
+     */
+    protected function getEmbedThumbnailUrl(): ?string
+    {
+        $videoId = $this->embed_video_id;
+        
+        switch ($this->embed_platform) {
+            case 'youtube':
+                // Try maxresdefault first (works for most videos)
+                return "https://img.youtube.com/vi/{$videoId}/maxresdefault.jpg";
+                
+            case 'dailymotion':
+                return "https://www.dailymotion.com/thumbnail/video/{$videoId}";
+                
+            case 'vimeo':
+                // Vimeo thumbnails require API call, use placeholder
+                return null;
+                
+            case 'googledrive':
+                // Google Drive thumbnails require authentication, use a generated placeholder
+                return "https://drive.google.com/thumbnail?id={$videoId}&sz=w640";
+                
+            case 'streamable':
+                return "https://cdn-cf-east.streamable.com/image/{$videoId}.jpg";
+                
+            case 'twitch':
+                return "https://static-cdn.jtvnw.net/cf_vods/{$videoId}/thumb/thumb0-640x360.jpg";
+                
+            default:
+                return null;
         }
-
-        return '/storage/' . $path;
     }
 
     /**

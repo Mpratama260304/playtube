@@ -16,7 +16,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // Create Admin User - REQUIRED
-        // Default login: email: mpratamagpt@gmail.com, password: Anonymous263 (with typo fix: Anonympus263 also works)
+        // Default login: email: mpratamagpt@gmail.com, password: Anonymous263
         $adminPassword = 'Anonymous263';
         User::updateOrCreate(
             ['email' => 'mpratamagpt@gmail.com'],
@@ -28,6 +28,7 @@ class DatabaseSeeder extends Seeder
                 'role' => 'admin',
                 'bio' => 'Platform Administrator',
                 'is_active' => true,
+                'is_banned' => false, // Explicitly set to allow admin panel access
                 'is_creator' => true, // Admin can upload videos
             ]
         );
