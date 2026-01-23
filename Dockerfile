@@ -133,7 +133,20 @@ chown -R www-data:www-data storage database bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage database bootstrap/cache 2>/dev/null || true
 
 # ============================================
-# 2. Railway Dynamic Port Configuration
+# 2. Create .env file (Railway uses env vars, but Laravel needs .env to exist)
+# ============================================
+echo "==> Creating .env file from environment variables..."
+if [ ! -f .env ]; then
+    # Create minimal .env - Laravel will use actual env vars from Railway
+    cat > .env << 'ENVFILE'
+# This file is auto-generated at container startup
+# Actual values come from Railway environment variables
+APP_ENV=production
+ENVFILE
+fi
+
+# ============================================
+# 3. Railway Dynamic Port Configuration
 # ============================================
 # Railway sets PORT env var, default to 80
 export PORT="${PORT:-80}"
@@ -149,7 +162,7 @@ else
 fi
 
 # ============================================
-# 3. Database Setup (SQLite fallback only)
+# 4. Database Setup (SQLite fallback only)
 # ============================================
 if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
     echo "==> Creating SQLite database..."
@@ -159,12 +172,14 @@ if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
 fi
 
 # ============================================
-# 4. Laravel Application Setup
+# 5. Laravel Application Setup
 # ============================================
-# Generate app key if not set
+# Skip key generation if APP_KEY is already set in environment
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
     echo "==> Generating APP_KEY..."
     php artisan key:generate --force 2>/dev/null || true
+else
+    echo "==> APP_KEY already set, skipping generation"
 fi
 
 # Create storage link
@@ -172,13 +187,13 @@ echo "==> Creating storage link..."
 php artisan storage:link --force 2>/dev/null || true
 
 # ============================================
-# 5. Database Migrations (always run on boot)
+# 6. Database Migrations (always run on boot)
 # ============================================
 echo "==> Running migrations..."
 php artisan migrate --force 2>&1 || echo "Migration warning (may be ok if tables exist)"
 
 # ============================================
-# 6. Conditional Seeding (controlled by env)
+# 7. Conditional Seeding (controlled by env)
 # ============================================
 if [ "${RUN_SEED:-false}" = "true" ]; then
     echo "==> Running database seeders..."
@@ -186,7 +201,7 @@ if [ "${RUN_SEED:-false}" = "true" ]; then
 fi
 
 # ============================================
-# 7. Clear and Cache Configuration
+# 8. Clear and Cache Configuration
 # ============================================
 echo "==> Optimizing Laravel..."
 php artisan config:clear 2>/dev/null || true
@@ -201,7 +216,7 @@ if [ "${APP_ENV:-production}" = "production" ]; then
 fi
 
 # ============================================
-# 8. Start Services
+# 9. Start Services
 # ============================================
 echo "==> Starting supervisord on port ${PORT}..."
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
