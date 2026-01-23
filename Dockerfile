@@ -172,12 +172,10 @@ echo "==> Creating storage link..."
 php artisan storage:link --force 2>/dev/null || true
 
 # ============================================
-# 5. Conditional Migrations (controlled by env)
+# 5. Database Migrations (always run on boot)
 # ============================================
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
-    echo "==> Running migrations..."
-    php artisan migrate --force 2>&1 || echo "Migration warning (may be ok if tables exist)"
-fi
+echo "==> Running migrations..."
+php artisan migrate --force 2>&1 || echo "Migration warning (may be ok if tables exist)"
 
 # ============================================
 # 6. Conditional Seeding (controlled by env)
