@@ -11,6 +11,8 @@ return [
     | by the framework. The "local" disk, as well as a variety of cloud
     | based disks are available to your application for file storage.
     |
+    | For Railway/production: Set FILESYSTEM_DISK=s3 and configure S3/R2 credentials
+    |
     */
 
     'default' => env('FILESYSTEM_DISK', 'local'),
@@ -48,15 +50,38 @@ return [
             'report' => false,
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | S3-Compatible Storage (AWS S3, Cloudflare R2, MinIO, etc.)
+        |--------------------------------------------------------------------------
+        |
+        | For production deployments on Railway (ephemeral filesystem), configure:
+        |
+        | AWS S3:
+        |   AWS_ACCESS_KEY_ID=your-key
+        |   AWS_SECRET_ACCESS_KEY=your-secret
+        |   AWS_DEFAULT_REGION=us-east-1
+        |   AWS_BUCKET=your-bucket-name
+        |
+        | Cloudflare R2:
+        |   AWS_ACCESS_KEY_ID=your-r2-access-key
+        |   AWS_SECRET_ACCESS_KEY=your-r2-secret-key
+        |   AWS_DEFAULT_REGION=auto
+        |   AWS_BUCKET=your-r2-bucket
+        |   AWS_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+        |   AWS_USE_PATH_STYLE_ENDPOINT=true
+        |
+        */
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
             'secret' => env('AWS_SECRET_ACCESS_KEY'),
-            'region' => env('AWS_DEFAULT_REGION'),
+            'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
             'bucket' => env('AWS_BUCKET'),
             'url' => env('AWS_URL'),
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'visibility' => 'public',
             'throw' => false,
             'report' => false,
         ],

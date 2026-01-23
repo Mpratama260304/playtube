@@ -52,27 +52,86 @@
                             <div class="embed-drive">
                                 <iframe
                                     src="{{ $video->embed_iframe_url }}"
-                                    allow="autoplay; encrypted-media; picture-in-picture"
+                                    class="w-full h-full"
+                                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                                     allowfullscreen
                                     loading="lazy"
-                                    referrerpolicy="no-referrer-when-downgrade"
+                                    referrerpolicy="strict-origin-when-cross-origin"
                                 ></iframe>
                                 {{-- Invisible overlays to block Google Drive's "open in new" button --}}
                                 <div class="gd-overlay-top-right" aria-hidden="true"></div>
                                 <div class="gd-overlay-top-left" aria-hidden="true"></div>
                             </div>
-                        @else
-                            {{-- Other platform embeds --}}
-                            <div class="relative w-full h-full embed-container">
+                        @elseif($video->embed_platform === 'dailymotion')
+                            {{-- Dailymotion embed with fallback handling --}}
+                            <div class="relative w-full h-full embed-container" x-data="embedFallback('{{ $video->embed_iframe_url }}', '{{ $video->embed_url ?? '' }}', 'dailymotion')">
                                 <iframe
-                                    src="{{ $video->embed_iframe_url }}"
+                                    x-ref="embedFrame"
+                                    x-show="!loadFailed"
+                                    :src="embedUrl"
                                     class="w-full h-full"
                                     frameborder="0"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
                                     allowfullscreen
                                     loading="lazy"
-                                    referrerpolicy="no-referrer"
+                                    referrerpolicy="strict-origin-when-cross-origin"
+                                    @load="onIframeLoad()"
+                                    @error="onIframeError()"
                                 ></iframe>
+                                {{-- Fallback UI when embed fails --}}
+                                <div x-show="loadFailed" x-cloak class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white p-4">
+                                    <svg class="w-16 h-16 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    </svg>
+                                    <p class="text-lg font-medium mb-2">Video couldn't be loaded</p>
+                                    <p class="text-sm text-gray-400 mb-4 text-center">The embedded video is temporarily unavailable</p>
+                                    <a 
+                                        :href="originalUrl || 'https://www.dailymotion.com'" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        Open on Dailymotion
+                                    </a>
+                                </div>
+                                {{-- Loading timeout indicator --}}
+                                <div x-show="loading && !loadFailed" x-cloak class="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
+                                    <div class="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                </div>
+                            </div>
+                        @else
+                            {{-- Other platform embeds (YouTube, Vimeo, etc.) --}}
+                            <div class="relative w-full h-full embed-container" x-data="embedFallback('{{ $video->embed_iframe_url }}', '{{ $video->embed_url ?? '' }}', '{{ $video->embed_platform ?? 'unknown' }}')">
+                                <iframe
+                                    x-ref="embedFrame"
+                                    x-show="!loadFailed"
+                                    :src="embedUrl"
+                                    class="w-full h-full"
+                                    frameborder="0"
+                                    allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+                                    allowfullscreen
+                                    loading="lazy"
+                                    referrerpolicy="strict-origin-when-cross-origin"
+                                    @load="onIframeLoad()"
+                                    @error="onIframeError()"
+                                ></iframe>
+                                {{-- Fallback UI when embed fails --}}
+                                <div x-show="loadFailed" x-cloak class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 text-white p-4">
+                                    <svg class="w-16 h-16 mb-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                    </svg>
+                                    <p class="text-lg font-medium mb-2">Video couldn't be loaded</p>
+                                    <p class="text-sm text-gray-400 mb-4 text-center">The embedded video is temporarily unavailable</p>
+                                    <a 
+                                        x-show="originalUrl"
+                                        :href="originalUrl" 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                                    >
+                                        Open Original Video
+                                    </a>
+                                </div>
                             </div>
                         @endif
                     @elseif($video->original_path)
@@ -483,6 +542,80 @@
 
     @push('styles')
     <script>
+        // Embed fallback handler for Dailymotion and other providers
+        // Detects iframe load failures and shows fallback UI
+        window.embedFallback = function(embedUrl, originalUrl, platform) {
+            return {
+                embedUrl: embedUrl,
+                originalUrl: originalUrl || '',
+                platform: platform,
+                loading: true,
+                loadFailed: false,
+                loadTimeout: null,
+                
+                init() {
+                    // Validate embed URL for security (especially Dailymotion)
+                    if (!this.validateEmbedUrl()) {
+                        this.loadFailed = true;
+                        this.loading = false;
+                        console.warn('Invalid embed URL blocked:', this.embedUrl);
+                        return;
+                    }
+                    
+                    // Set a timeout to detect if iframe never loads (e.g., blocked)
+                    this.loadTimeout = setTimeout(() => {
+                        if (this.loading) {
+                            this.onIframeError();
+                        }
+                    }, 15000); // 15 second timeout
+                },
+                
+                validateEmbedUrl() {
+                    if (!this.embedUrl) return false;
+                    
+                    try {
+                        const url = new URL(this.embedUrl);
+                        
+                        // Platform-specific validation
+                        if (this.platform === 'dailymotion') {
+                            // Dailymotion embeds must be from dailymotion.com
+                            const validHosts = ['www.dailymotion.com', 'dailymotion.com', 'geo.dailymotion.com'];
+                            if (!validHosts.includes(url.hostname)) return false;
+                            // Path must be /embed/video/{id}
+                            if (!url.pathname.match(/^\/embed\/video\/[a-zA-Z0-9]+/)) return false;
+                        } else if (this.platform === 'youtube') {
+                            const validHosts = ['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com'];
+                            if (!validHosts.includes(url.hostname)) return false;
+                        } else if (this.platform === 'vimeo') {
+                            const validHosts = ['player.vimeo.com', 'vimeo.com'];
+                            if (!validHosts.includes(url.hostname)) return false;
+                        }
+                        
+                        // Must be HTTPS
+                        if (url.protocol !== 'https:') return false;
+                        
+                        return true;
+                    } catch (e) {
+                        return false;
+                    }
+                },
+                
+                onIframeLoad() {
+                    clearTimeout(this.loadTimeout);
+                    this.loading = false;
+                    // Note: onload fires even if iframe content fails to render
+                    // The timeout is our main protection against silent failures
+                },
+                
+                onIframeError() {
+                    clearTimeout(this.loadTimeout);
+                    this.loading = false;
+                    this.loadFailed = true;
+                    console.warn('Embed failed to load:', this.platform, this.embedUrl);
+                }
+            };
+        };
+
         // Define videoPage before Alpine.js starts
         window.videoPage = function() {
             return {

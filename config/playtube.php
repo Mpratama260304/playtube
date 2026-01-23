@@ -7,12 +7,15 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configuration for video and image uploads.
+    | Note: UPLOAD_MAX_SIZE_KB should match PHP and Nginx limits.
+    | Default: 2GB (2097152 KB) to match docker/php.ini and nginx.conf
     |
     */
 
     'upload' => [
-        // Maximum video file size in KB (default: 512MB = 524288 KB)
-        'max_size_kb' => env('UPLOAD_MAX_SIZE_KB', 524288),
+        // Maximum video file size in KB (default: 2GB = 2097152 KB)
+        // Matches docker/php.ini upload_max_filesize and nginx client_max_body_size
+        'max_size_kb' => env('UPLOAD_MAX_SIZE_KB', 2097152),
         
         // Allowed video MIME types
         'allowed_video_types' => [

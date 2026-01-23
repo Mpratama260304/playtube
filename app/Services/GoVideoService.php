@@ -217,10 +217,58 @@ class GoVideoService
             return false;
         }
 
-        // Cache health status for 30 seconds
+        // Cache health status for 30 seconds to reduce health check spam
         return Cache::remember('go_video_server_healthy', 30, function () {
-            return $this->isHealthy();
+            $healthy = $this->isHealthy();
+            
+            // Log only on state change (once per cache period)
+            if (!$healthy) {
+                Log::warning('Go Video Server is not reachable, will fallback to direct streaming', [
+                    'server_url' => $this->serverUrl,
+                ]);
+            }
+            
+            return $healthy;
         });
+    }
+
+    /**
+     * Get fallback URL when Go server is unavailable
+     * Returns direct storage URL for PHP/Nginx streaming
+     */
+    public function getFallbackStreamUrl(Video $video): ?string
+    {
+        // Try stream.mp4 first (optimized for streaming)
+        if ($video->stream_path) {
+            return asset('storage/' . $video->stream_path);
+        }
+        
+        // Fallback to original file
+        if ($video->original_path) {
+            return asset('storage/' . $video->original_path);
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get stream URL with automatic fallback
+     * If Go server is unavailable, falls back to direct file URL
+     */
+    public function getStreamUrlWithFallback(Video $video, ?string $quality = null): string
+    {
+        if ($this->shouldUseGoServer()) {
+            return $this->getStreamUrl($video, $quality);
+        }
+        
+        // Fallback to direct streaming
+        $fallback = $this->getFallbackStreamUrl($video);
+        if ($fallback) {
+            return $fallback;
+        }
+        
+        // Last resort: return Go server URL anyway (may fail but shows error)
+        return $this->getStreamUrl($video, $quality);
     }
 
     /**
