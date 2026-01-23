@@ -105,6 +105,7 @@ RUN chown -R www-data:www-data /var/www/html \
 COPY docker/nginx.conf.template /etc/nginx/nginx.conf.template
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
+COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/queue-worker.sh /usr/local/bin/queue-worker.sh
 RUN chmod +x /usr/local/bin/queue-worker.sh
@@ -136,14 +137,17 @@ chmod -R 775 storage database bootstrap/cache 2>/dev/null || true
 # 2. Create .env file (Railway uses env vars, but Laravel needs .env to exist)
 # ============================================
 echo "==> Creating .env file from environment variables..."
-if [ ! -f .env ]; then
-    # Create minimal .env - Laravel will use actual env vars from Railway
-    cat > .env << 'ENVFILE'
+# Always create/update .env with APP_KEY placeholder for key:generate to work
+cat > .env << 'ENVFILE'
 # This file is auto-generated at container startup
 # Actual values come from Railway environment variables
+APP_NAME=PlayTube
 APP_ENV=production
+APP_KEY=
+APP_DEBUG=false
+LOG_CHANNEL=stderr
+LOG_LEVEL=debug
 ENVFILE
-fi
 
 # ============================================
 # 3. Railway Dynamic Port Configuration
@@ -174,12 +178,13 @@ fi
 # ============================================
 # 5. Laravel Application Setup
 # ============================================
-# Skip key generation if APP_KEY is already set in environment
+# Generate app key if not set in environment
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
     echo "==> Generating APP_KEY..."
-    php artisan key:generate --force 2>/dev/null || true
+    php artisan key:generate --force
 else
-    echo "==> APP_KEY already set, skipping generation"
+    echo "==> APP_KEY already set in environment, updating .env..."
+    sed -i "s|APP_KEY=.*|APP_KEY=${APP_KEY}|" .env
 fi
 
 # Create storage link
