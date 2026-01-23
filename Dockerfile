@@ -48,7 +48,7 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     gettext \
-    # Additional tools for video processing
+    busybox-extras \
     && rm -rf /var/cache/apk/*
 
 # Install PHP extensions
@@ -246,24 +246,29 @@ echo "==> Starting PHP-FPM..."
 php-fpm -D
 
 # Wait for PHP-FPM to be ready
-sleep 2
+sleep 3
 
 # ============================================
-# 12. Verify PHP-FPM is running
+# 12. Verify PHP-FPM is listening on port 9000
 # ============================================
-if ! pgrep -x "php-fpm" > /dev/null; then
-    echo "ERROR: PHP-FPM failed to start!"
-    exit 1
+echo "==> Checking PHP-FPM status..."
+if nc -z 127.0.0.1 9000 2>/dev/null; then
+    echo "==> PHP-FPM is listening on port 9000"
+else
+    echo "==> PHP-FPM check via nc failed, checking process..."
+    if ps aux | grep -v grep | grep php-fpm > /dev/null; then
+        echo "==> PHP-FPM process is running"
+    else
+        echo "ERROR: PHP-FPM is not running!"
+        exit 1
+    fi
 fi
-echo "==> PHP-FPM is running"
 
 # ============================================
 # 13. Start Nginx (foreground - main process)
 # ============================================
 echo "============================================"
 echo "==> Starting Nginx on port ${PORT}..."
-echo "==> Final nginx config:"
-cat /etc/nginx/http.d/default.conf
 echo "============================================"
 
 # Start nginx in foreground (this keeps the container alive)
