@@ -2,10 +2,8 @@
 # PORT is substituted at runtime via envsubst
 
 server {
-    # Listen on all interfaces - CRITICAL for Railway
-    # Using 0.0.0.0 explicitly to ensure external access
-    listen 0.0.0.0:${PORT} default_server;
-    listen [::]:${PORT} default_server;
+    # Listen on all interfaces - Railway requires this
+    listen ${PORT} default_server;
     server_name _;
     
     root /var/www/html/public;

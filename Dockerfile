@@ -240,12 +240,34 @@ if [ "${APP_ENV:-production}" = "production" ]; then
 fi
 
 # ============================================
-# 11. Start Supervisord
+# 11. Start PHP-FPM in background
+# ============================================
+echo "==> Starting PHP-FPM..."
+php-fpm -D
+
+# Wait for PHP-FPM to be ready
+sleep 2
+
+# ============================================
+# 12. Verify PHP-FPM is running
+# ============================================
+if ! pgrep -x "php-fpm" > /dev/null; then
+    echo "ERROR: PHP-FPM failed to start!"
+    exit 1
+fi
+echo "==> PHP-FPM is running"
+
+# ============================================
+# 13. Start Nginx (foreground - main process)
 # ============================================
 echo "============================================"
-echo "==> Starting services on port ${PORT}..."
+echo "==> Starting Nginx on port ${PORT}..."
+echo "==> Final nginx config:"
+cat /etc/nginx/http.d/default.conf
 echo "============================================"
-exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
+
+# Start nginx in foreground (this keeps the container alive)
+exec nginx -g "daemon off;"
 EOF
 
 RUN chmod +x /usr/local/bin/start.sh
