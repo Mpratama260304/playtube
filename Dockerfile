@@ -47,6 +47,7 @@ RUN apk add --no-cache \
     sqlite-dev \
     nginx \
     supervisor \
+    gettext \
     # Additional tools for video processing
     && rm -rf /var/cache/apk/*
 
