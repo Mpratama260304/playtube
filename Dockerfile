@@ -102,31 +102,44 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
 # Copy configuration files
-COPY docker/nginx.conf.template /etc/nginx/nginx.conf.template
-COPY docker/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/queue-worker.sh /usr/local/bin/queue-worker.sh
 RUN chmod +x /usr/local/bin/queue-worker.sh
 
-# Create start script with Railway-compatible startup
+# Create start script with Railway-compatible startup and diagnostics
 COPY <<'EOF' /usr/local/bin/start.sh
 #!/bin/sh
 set -e
 cd /var/www/html
 
-echo "==> Starting PlayTube initialization..."
-echo "==> Environment: ${APP_ENV:-production}"
+echo "============================================"
+echo "PlayTube Container Startup"
+echo "============================================"
+echo "Date: $(date)"
+echo "PORT=${PORT:-not set}"
+echo "APP_ENV=${APP_ENV:-production}"
+echo "DB_CONNECTION=${DB_CONNECTION:-sqlite}"
+echo "QUEUE_CONNECTION=${QUEUE_CONNECTION:-database}"
+echo "============================================"
 
 # ============================================
-# 1. Directory Setup
+# 1. Set PORT (Railway provides this)
+# ============================================
+export PORT="${PORT:-8080}"
+echo "==> Using PORT: ${PORT}"
+
+# ============================================
+# 2. Directory Setup
 # ============================================
 echo "==> Creating directories..."
 mkdir -p storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs
 mkdir -p database
 mkdir -p /var/log/supervisor
 mkdir -p /run/nginx
+mkdir -p /var/lib/nginx/html
 
 # Set permissions
 echo "==> Setting permissions..."
@@ -134,13 +147,10 @@ chown -R www-data:www-data storage database bootstrap/cache 2>/dev/null || true
 chmod -R 775 storage database bootstrap/cache 2>/dev/null || true
 
 # ============================================
-# 2. Create .env file (Railway uses env vars, but Laravel needs .env to exist)
+# 3. Create .env file
 # ============================================
-echo "==> Creating .env file from environment variables..."
-# Always create/update .env with APP_KEY placeholder for key:generate to work
+echo "==> Creating .env file..."
 cat > .env << 'ENVFILE'
-# This file is auto-generated at container startup
-# Actual values come from Railway environment variables
 APP_NAME=PlayTube
 APP_ENV=production
 APP_KEY=
@@ -150,23 +160,17 @@ LOG_LEVEL=debug
 ENVFILE
 
 # ============================================
-# 3. Railway Dynamic Port Configuration
+# 4. Generate Nginx config from template
 # ============================================
-# Railway sets PORT env var, default to 80
-export PORT="${PORT:-80}"
-echo "==> Configuring Nginx to listen on port ${PORT}..."
+echo "==> Generating Nginx config for port ${PORT}..."
+envsubst '${PORT}' < /etc/nginx/templates/default.conf.template > /etc/nginx/http.d/default.conf
 
-# Generate Nginx config from template if it exists
-if [ -f /etc/nginx/nginx.conf.template ]; then
-    envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/http.d/default.conf
-else
-    # Fallback: sed the existing config
-    sed -i "s/listen 80;/listen ${PORT};/g" /etc/nginx/http.d/default.conf
-    sed -i "s/listen \[::\]:80;/listen [::]:${PORT};/g" /etc/nginx/http.d/default.conf
-fi
+# Verify nginx config
+echo "==> Testing Nginx configuration..."
+nginx -t || { echo "ERROR: Nginx config test failed!"; exit 1; }
 
 # ============================================
-# 4. Database Setup (SQLite fallback only)
+# 5. Database Setup (SQLite fallback)
 # ============================================
 if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
     echo "==> Creating SQLite database..."
@@ -176,44 +180,48 @@ if [ "${DB_CONNECTION:-sqlite}" = "sqlite" ]; then
 fi
 
 # ============================================
-# 5. Laravel Application Setup
+# 6. Laravel APP_KEY
 # ============================================
-# Generate app key if not set in environment
 if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "" ]; then
     echo "==> Generating APP_KEY..."
     php artisan key:generate --force
 else
-    echo "==> APP_KEY already set in environment, updating .env..."
+    echo "==> Using provided APP_KEY"
     sed -i "s|APP_KEY=.*|APP_KEY=${APP_KEY}|" .env
 fi
 
-# Create storage link
+# ============================================
+# 7. Storage Link
+# ============================================
 echo "==> Creating storage link..."
 php artisan storage:link --force 2>/dev/null || true
 
 # ============================================
-# 6. Database Migrations (always run on boot)
+# 8. Migrations (controlled by RUN_MIGRATIONS)
 # ============================================
-echo "==> Running migrations..."
-php artisan migrate --force 2>&1 || echo "Migration warning (may be ok if tables exist)"
-
-# ============================================
-# 7. Conditional Seeding (controlled by env)
-# ============================================
-if [ "${RUN_SEED:-false}" = "true" ]; then
-    echo "==> Running database seeders..."
-    php artisan db:seed --force 2>&1 || echo "Seeding warning (may be ok if data exists)"
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+    echo "==> Running migrations..."
+    php artisan migrate --force
+else
+    echo "==> Skipping migrations (RUN_MIGRATIONS=${RUN_MIGRATIONS})"
 fi
 
 # ============================================
-# 8. Clear and Cache Configuration
+# 9. Seeding (controlled by RUN_SEED)
+# ============================================
+if [ "${RUN_SEED:-false}" = "true" ]; then
+    echo "==> Running database seeders..."
+    php artisan db:seed --force
+fi
+
+# ============================================
+# 10. Laravel Optimization
 # ============================================
 echo "==> Optimizing Laravel..."
 php artisan config:clear 2>/dev/null || true
 php artisan route:clear 2>/dev/null || true
 php artisan view:clear 2>/dev/null || true
 
-# Only cache config in production (requires all env vars to be set)
 if [ "${APP_ENV:-production}" = "production" ]; then
     php artisan config:cache 2>/dev/null || true
     php artisan route:cache 2>/dev/null || true
@@ -221,20 +229,22 @@ if [ "${APP_ENV:-production}" = "production" ]; then
 fi
 
 # ============================================
-# 9. Start Services
+# 11. Start Supervisord
 # ============================================
-echo "==> Starting supervisord on port ${PORT}..."
+echo "============================================"
+echo "==> Starting services on port ${PORT}..."
+echo "============================================"
 exec /usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf
 EOF
 
 RUN chmod +x /usr/local/bin/start.sh
 
-# Expose port (Railway will override with $PORT)
-EXPOSE 80
+# Expose port (documentation only, Railway uses $PORT)
+EXPOSE 8080
 
-# Health check - Railway compatible
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=5 \
-    CMD curl -f http://localhost:${PORT:-80}/health || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
+    CMD curl -fsS http://127.0.0.1:${PORT:-8080}/health || exit 1
 
-# Start supervisord
+# Start the application
 CMD ["/usr/local/bin/start.sh"]
