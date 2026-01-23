@@ -2,52 +2,20 @@
 # PORT is substituted at runtime via envsubst
 
 server {
-    # Listen on all interfaces (0.0.0.0) - CRITICAL for Railway
-    listen ${PORT} default_server;
+    # Listen on all interfaces - CRITICAL for Railway
+    # Using 0.0.0.0 explicitly to ensure external access
+    listen 0.0.0.0:${PORT} default_server;
     listen [::]:${PORT} default_server;
     server_name _;
     
     root /var/www/html/public;
     index index.php index.html;
 
-    # Logging to stdout/stderr for Railway
-    access_log /dev/stdout;
-    error_log /dev/stderr warn;
-
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-    # Gzip compression
-    gzip on;
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
-
-    # Max upload size (for video uploads)
-    client_max_body_size 2G;
-    client_body_timeout 3600s;
-    
-    # Proxy timeouts for video processing
-    proxy_connect_timeout 3600s;
-    proxy_send_timeout 3600s;
-    proxy_read_timeout 3600s;
-
     # Health check endpoint - fast, no PHP, no DB
     location = /health {
         access_log off;
         add_header Content-Type text/plain;
         return 200 "ok\n";
-    }
-
-    # Diagnostic mode endpoint (always available)
-    location = /nginx-status {
-        access_log off;
-        add_header Content-Type text/plain;
-        return 200 "nginx ok on port ${PORT}\n";
     }
 
     # Handle Laravel routes
@@ -64,13 +32,7 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param PATH_INFO $fastcgi_path_info;
         include fastcgi_params;
-        
-        # Timeout for long-running scripts
         fastcgi_read_timeout 3600s;
-        fastcgi_send_timeout 3600s;
-        fastcgi_connect_timeout 60s;
-        
-        # Buffer settings
         fastcgi_buffer_size 128k;
         fastcgi_buffers 4 256k;
         fastcgi_busy_buffers_size 256k;
@@ -79,23 +41,13 @@ server {
     # Deny access to hidden files
     location ~ /\. {
         deny all;
-        access_log off;
-        log_not_found off;
     }
 
-    # Static file caching
-    location ~* \.(jpg|jpeg|gif|png|webp|svg|ico|css|js|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-        access_log off;
-    }
-
-    # Video streaming
-    location ~* \.(mp4|webm|ogg|m3u8|ts)$ {
+    # Static files
+    location ~* \.(jpg|jpeg|gif|png|webp|svg|ico|css|js|woff|woff2|ttf|eot|mp4|webm|m3u8|ts)$ {
         expires 1y;
         add_header Cache-Control "public";
         add_header Accept-Ranges bytes;
-        proxy_buffering off;
     }
 
     # Storage files
@@ -104,29 +56,5 @@ server {
         expires 1y;
         add_header Cache-Control "public";
         add_header Accept-Ranges bytes;
-    }
-
-    # Filament assets
-    location ^~ /filament {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    # Livewire
-    location /livewire {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    # Error pages
-    error_page 404 /index.php;
-    error_page 500 502 503 504 /50x.html;
-    location = /50x.html {
-        root /var/lib/nginx/html;
-        internal;
-    }
-
-    # Disable access to sensitive files
-    location ~* (\.env|\.git|composer\.json|composer\.lock|package\.json|package-lock\.json)$ {
-        deny all;
-        return 404;
     }
 }

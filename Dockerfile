@@ -102,12 +102,17 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html/bootstrap/cache
 
 # Copy configuration files
+COPY docker/nginx-main.conf /etc/nginx/nginx.conf
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/queue-worker.sh /usr/local/bin/queue-worker.sh
 RUN chmod +x /usr/local/bin/queue-worker.sh
+
+# Ensure nginx directories exist and have correct permissions
+RUN mkdir -p /etc/nginx/templates /etc/nginx/http.d /run/nginx /var/lib/nginx/html /var/log/nginx \
+    && chown -R root:root /var/lib/nginx /run/nginx /var/log/nginx
 
 # Create start script with Railway-compatible startup and diagnostics
 COPY <<'EOF' /usr/local/bin/start.sh
@@ -140,6 +145,7 @@ mkdir -p database
 mkdir -p /var/log/supervisor
 mkdir -p /run/nginx
 mkdir -p /var/lib/nginx/html
+mkdir -p /etc/nginx/http.d
 
 # Set permissions
 echo "==> Setting permissions..."
@@ -163,11 +169,16 @@ ENVFILE
 # 4. Generate Nginx config from template
 # ============================================
 echo "==> Generating Nginx config for port ${PORT}..."
+mkdir -p /etc/nginx/http.d
 envsubst '${PORT}' < /etc/nginx/templates/default.conf.template > /etc/nginx/http.d/default.conf
+
+# Show generated config for debugging
+echo "==> Generated nginx config:"
+cat /etc/nginx/http.d/default.conf | head -20
 
 # Verify nginx config
 echo "==> Testing Nginx configuration..."
-nginx -t || { echo "ERROR: Nginx config test failed!"; exit 1; }
+nginx -t 2>&1 || { echo "ERROR: Nginx config test failed!"; cat /etc/nginx/http.d/default.conf; exit 1; }
 
 # ============================================
 # 5. Database Setup (SQLite fallback)
